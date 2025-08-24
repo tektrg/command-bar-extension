@@ -103,7 +103,10 @@ chrome.tabs.query({}, (tabs) => {
   } else if (msg.type === "OPEN") {
     const { item } = msg;
     if (item.source === "tab") {
-      chrome.tabs.update(item.id, { active: true });
+      chrome.tabs.update(item.id, { active: true }, (tab) => {
+        if (chrome.runtime.lastError || !tab) return;
+        chrome.windows.update(tab.windowId, { focused: true });
+      });
     } else {
       chrome.tabs.create({ url: item.url });
     }
