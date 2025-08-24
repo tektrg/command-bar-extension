@@ -73,13 +73,21 @@ historyItems.forEach(h => results.push({ id: h.id, title: h.title, url: h.url, s
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "SEARCH") {
-    search(msg.query.toLowerCase()).then(sendResponse);
+    const activeId = sender.tab?.id;
+    search(msg.query.toLowerCase()).then(results => {
+      const filtered = activeId ? results.filter(r => !(r.type === 'tab' && r.id === activeId)) : results;
+      sendResponse(filtered);
+    });
     return true; // async
   } else if (msg.type === "RECENT") {
-    chrome.tabs.query({}, (tabs) => {
+chrome.tabs.query({}, (tabs) => {
+      const activeId = sender.tab?.id;
+      if (activeId) {
+        tabs = tabs.filter(t => t.id !== activeId);
+      }
       // Sort by most recently accessed
       tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-const recent = tabs.slice(0, 5).map(t => ({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : getFavicon(t.url), type: 'tab' }));
+      const recent = tabs.slice(0, 5).map(t => ({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : getFavicon(t.url), type: 'tab' }));
       sendResponse(recent);
     });
     return true;
