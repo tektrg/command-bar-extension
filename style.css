@@ -16,6 +16,7 @@
 
 #cmd-bar-container {
   min-width: 600px !important;
+  max-width: 900px !important;
   width: 70%;
   background: #2b2b2b !important;
   border-radius: 8px !important;
@@ -39,7 +40,7 @@
 
 #cmd-timer {
   height: 2px !important;
-  background: #76c7ff !important;
+  background: #c2c2c2 !important;
   width: 100% !important;
   transform-origin: left !important;
   display: none !important;
@@ -63,7 +64,7 @@
 
 .cmd-item {
   display: flex !important;
-  font-size: 14px !important;
+  font-size: 16px !important;
   align-items: flex-start !important;
   padding: 10px !important;
   border-radius: 4px !important;
@@ -74,21 +75,21 @@
 .icon, img.favicon {
   width: 16px !important;
   height: 16px !important;
-  margin-right: 8px !important;
+  margin-right: 12px !important;
   flex-shrink: 0 !important;
   border-radius: 2px !important;
 }
 
 .cmd-item:hover,
 .cmd-item.active {
-  background: #4a4a4a !important;
+  background: #191919 !important;
 }
 
 .cmd-item .url {
   font-size: 12px !important;
-  color: #b0b0b0 !important;
+  color: #4d4d4d !important;
   display: flex !important;
   align-items: center !important;
-  padding: 6px 0px !important;
+  padding: 2px 0px !important;
 }
 
