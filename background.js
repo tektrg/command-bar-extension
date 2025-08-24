@@ -91,6 +91,15 @@ chrome.tabs.query({}, (tabs) => {
       sendResponse(recent);
     });
     return true;
+  } else if (msg.type === "DELETE") {
+    const { item } = msg;
+    if (item.type === 'tab') {
+      chrome.tabs.remove(item.id);
+    } else if (item.type === 'bookmark') {
+      chrome.bookmarks.remove(item.id);
+    } else if (item.type === 'history') {
+      chrome.history.deleteUrl({ url: item.url });
+    }
   } else if (msg.type === "OPEN") {
     const { item } = msg;
     if (item.source === "tab") {
