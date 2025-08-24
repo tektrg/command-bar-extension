@@ -1,0 +1,39 @@
+{
+  "name": "Command Bar",
+  "description": "Minimal command bar like Arc browser (Cmd+P)",
+  "version": "1.0.0",
+  "manifest_version": 3,
+  "permissions": [
+    "tabs",
+    "bookmarks",
+    "history",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["style.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "toggle-command-bar": {
+      "suggested_key": {
+        "default": "Ctrl+P",
+        "mac": "Command+P"
+      },
+      "description": "Toggle command bar"
+    }
+  },
+  "action": {
+    "default_title": "Command Bar"
+  }
+}
+
