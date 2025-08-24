@@ -33,18 +33,41 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 
 // handle search queries from content script
+async function getBookmarkPath(node) {
+  const parts = [];
+  let current = node;
+  while (current && current.parentId) {
+    current = await chrome.bookmarks.get(current.parentId).then(arr => arr[0]).catch(() => null);
+    if (current && current.title) parts.unshift(current.title);
+    if (current && (!current.parentId || current.parentId === '0')) break;
+  }
+  return parts.join(' / ');
+}
+
+function getFavicon(pageUrl) {
+  try {
+    const { hostname } = new URL(pageUrl);
+    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+  } catch {
+    return '';
+  }
+}
+
 async function search(query) {
   const results = [];
   // open tabs first
   const tabs = await chrome.tabs.query({});
   const tabMatches = tabs.filter(t => (t.title && t.title.toLowerCase().includes(query)) || (t.url && t.url.toLowerCase().includes(query)));
-tabMatches.forEach(t => results.push({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl || `chrome://favicon/${t.url}` }));
-  // bookmarks
+tabMatches.forEach(t => results.push({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : getFavicon(t.url), type: 'tab' }));
+// bookmarks
   const bookmarkTree = await chrome.bookmarks.search({ query });
-bookmarkTree.forEach(b => results.push({ id: b.id, title: b.title, url: b.url, source: "bookmark", icon: `chrome://favicon/${b.url}` }));
-  // history
+  for (const b of bookmarkTree) {
+    const folderPath = await getBookmarkPath(b);
+results.push({ id: b.id, title: b.title, url: b.url, source: "bookmark", icon: getFavicon(b.url), folder: folderPath, type: 'bookmark' });
+  }
+// history
   const historyItems = await chrome.history.search({ text: query, maxResults: 20 });
-historyItems.forEach(h => results.push({ id: h.id, title: h.title, url: h.url, source: "history", icon: `chrome://favicon/${h.url}` }));
+historyItems.forEach(h => results.push({ id: h.id, title: h.title, url: h.url, source: "history", icon: getFavicon(h.url), lastVisitTime: h.lastVisitTime, type: 'history' }));
   return results;
 }
 
@@ -56,7 +79,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.tabs.query({}, (tabs) => {
       // Sort by most recently accessed
       tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-const recent = tabs.slice(0, 5).map(t => ({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl || `chrome://favicon/${t.url}` }));
+const recent = tabs.slice(0, 5).map(t => ({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : getFavicon(t.url), type: 'tab' }));
       sendResponse(recent);
     });
     return true;
