@@ -129,11 +129,15 @@ function toggleOverlay() {
       clearTimeout(idleTimer);
       idleTimer = null;
     }
-    if (timerEl) timerEl.classList.remove('run');
+    if (timerEl) {
+      timerEl.classList.remove('run');
+      timerEl.style.display = 'none';
+    }
   }
 
   function startTimerAnimation() {
     if (!timerEl) return;
+    timerEl.style.display = 'block';
     timerEl.classList.remove('run');
     void timerEl.offsetWidth; // force reflow to restart animation
     timerEl.classList.add('run');
@@ -148,7 +152,7 @@ function toggleOverlay() {
         chrome.runtime.sendMessage({ type: 'OPEN', item });
         destroyOverlay();
       }
-    }, 3000);
+    }, 500);
   }
 
   function renderList() {
@@ -198,7 +202,7 @@ function getIconHtml(it) {
       const glyph = typeGlyph(it);
       return glyph ? `${glyph} ${escapeHtml(it.folder)}` : escapeHtml(it.folder);
     }
-    return escapeHtml(it.url);
+    return escapeHtml(truncateMiddle(it.url));
   }
 
   function timeAgo(ms) {
@@ -214,7 +218,23 @@ function getIconHtml(it) {
   }
 
   function escapeHtml(str) {
-    return str?.replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])) || '';
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    };
+    return str?.replace(/[&<>"']/g, (c) => map[c]) || '';
+  }
+
+  // Truncate long strings in the middle so they fit on a single line
+  // Example: "https://verylongdomain.com/path/to/resource" (maxLen 40)
+  // becomes "https://verylo.../path/to/resource"
+  function truncateMiddle(str, maxLen = 60) {
+    if (!str || str.length <= maxLen) return str || '';
+    const part = Math.floor((maxLen - 3) / 2);
+    return str.slice(0, part) + '...' + str.slice(str.length - part);
   }
 
   chrome.runtime.onMessage.addListener((msg) => {
