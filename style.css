@@ -48,7 +48,7 @@
 
 #cmd-timer.run {
   display: block !important;
-  animation: cmdTimerShrink 0.5s linear forwards !important;
+  animation: cmdTimerShrink 1s linear forwards !important;
 }
 
 @keyframes cmdTimerShrink {
@@ -75,6 +75,7 @@
 .icon, img.favicon {
   width: 16px !important;
   height: 16px !important;
+  margin-top: 5px !important;
   margin-right: 12px !important;
   flex-shrink: 0 !important;
   border-radius: 2px !important;
@@ -91,5 +92,11 @@
   display: flex !important;
   align-items: center !important;
   padding: 2px 0px !important;
+}
+
+/* Highlighted query text */
+.hl {
+  text-decoration: underline;
+  text-decoration-color: #b9a079;
 }
 
