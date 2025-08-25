@@ -45,6 +45,15 @@ container.appendChild(timerEl);
     container.appendChild(confirmEl);
     overlay.appendChild(container);
 
+    // Close overlay when user clicks outside the container
+    overlay.addEventListener('mousedown', (ev) => {
+      if (ev.target === overlay) {
+        destroyOverlay();
+      }
+    });
+    // Prevent clicks inside the container from bubbling to overlay handler
+    container.addEventListener('mousedown', (ev) => ev.stopPropagation());
+
     document.body.appendChild(overlay);
 
     // listeners
@@ -245,7 +254,7 @@ function hideDeleteConfirm() {
         chrome.runtime.sendMessage({ type: 'OPEN', item });
         destroyOverlay();
       }
-    }, 500);
+    }, 1000);
   }
 
   function renderList() {
@@ -258,7 +267,7 @@ function hideDeleteConfirm() {
         <div style="display:flex;">
           ${iconHtml}
           <div style="display:flex;flex-direction:column;">
-            <span>${escapeHtml(it.title || it.url)}</span>
+            <span>${highlightMatches(it.title || it.url, input?.value.trim())}</span>
             <span class="url">${getSubtitle(it)}</span>
           </div>
         </div>
@@ -310,7 +319,7 @@ function getIconHtml(it) {
       const glyph = typeGlyph(it);
       return glyph ? `${glyph} ${escapeHtml(it.folder)}` : escapeHtml(it.folder);
     }
-    return escapeHtml(truncateMiddle(it.url));
+    return highlightMatches(truncateMiddle(it.url), input?.value.trim());
   }
 
   function timeAgo(ms) {
@@ -336,6 +345,19 @@ function getIconHtml(it) {
     return str?.replace(/[&<>"']/g, (c) => map[c]) || '';
   }
 
+  // Highlight occurrences of the current query within text
+  function highlightMatches(text, query) {
+    if (!query) return escapeHtml(text);
+    const escaped = escapeHtml(text || '');
+    // Escape regex special chars in query
+    const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try {
+      const regex = new RegExp(safeQuery, 'ig');
+      return escaped.replace(regex, (m) => `<span class="hl">${m}</span>`);
+    } catch (e) {
+      return escaped;
+    }
+  }
   // Truncate long strings in the middle so they fit on a single line
   // Example: "https://verylongdomain.com/path/to/resource" (maxLen 40)
   // becomes "https://verylo.../path/to/resource"
