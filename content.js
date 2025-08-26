@@ -3,67 +3,138 @@
   if (window.__cmdBarInjected) return;
   window.__cmdBarInjected = true;
 
-let overlay, input, listEl, confirmEl, items = [], selectedIdx = -1, idleTimer = null;
-// Deletion confirmation state
-let deleteConfirm = false;
-let lastConfirmIdx = -1;
-let confirmTimer = null;
+// Constants
+const CONSTANTS = {
+  MATERIAL_ICONS_URL: 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&icon_names=bookmark,history,public',
+  CONFIRM_TIMEOUT: 2000,
+  MAX_SUBTITLE_LENGTH: 60,
+  FALLBACK_ICON: chrome.runtime.getURL('link_18dp_E3E3E3.svg')
+};
+
+// Message service to avoid DRY violations
+const messageService = {
+  send: (type, data = {}) => chrome.runtime.sendMessage({ type, ...data }),
+  sendWithCallback: (type, data = {}, callback) => chrome.runtime.sendMessage({ type, ...data }, callback),
+  recent: (callback) => messageService.sendWithCallback('RECENT', {}, callback),
+  search: (query, callback) => messageService.sendWithCallback('SEARCH', { query }, callback),
+  open: (item) => messageService.send('OPEN', { item }),
+  delete: (item) => messageService.send('DELETE', { item })
+};
+
+// UI State Manager for better organization
+const uiState = {
+  overlay: null,
+  input: null,
+  listEl: null,
+  confirmEl: null,
+  items: [],
+  selectedIdx: -1,
+  idleTimer: null,
+  deleteConfirm: false,
+  lastConfirmIdx: -1,
+  confirmTimer: null,
+  
+  reset() {
+    this.items = [];
+    this.selectedIdx = -1;
+    this.deleteConfirm = false;
+    this.lastConfirmIdx = -1;
+    this.clearTimers();
+  },
+  
+  clearTimers() {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    if (this.confirmTimer) {
+      clearTimeout(this.confirmTimer);
+      this.confirmTimer = null;
+    }
+  },
+  
+  setItems(newItems) {
+    this.items = newItems || [];
+    this.selectedIdx = -1;
+  }
+};
+
+// Legacy global variables for backward compatibility
+let overlay, input, listEl, confirmEl, items, selectedIdx, idleTimer;
+let deleteConfirm, lastConfirmIdx, confirmTimer;
 
 function createOverlay() {
+    // Update state references
+    overlay = uiState.overlay;
+    input = uiState.input;
+    listEl = uiState.listEl;
+    confirmEl = uiState.confirmEl;
+    items = uiState.items;
+    selectedIdx = uiState.selectedIdx;
+    deleteConfirm = uiState.deleteConfirm;
+    lastConfirmIdx = uiState.lastConfirmIdx;
+    confirmTimer = uiState.confirmTimer;
+    idleTimer = uiState.idleTimer;
     // load material icons once
     if (!document.getElementById('prd-stv-cmd-bar-icons')) {
       const link = document.createElement('link');
       link.id = 'prd-stv-cmd-bar-icons';
       link.rel = 'stylesheet';
-      link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&icon_names=bookmark,history,public';
+      link.href = CONSTANTS.MATERIAL_ICONS_URL;
       document.head.appendChild(link);
     }
-    overlay = document.createElement('div');
-    overlay.id = 'prd-stv-cmd-bar-overlay';
+    uiState.overlay = document.createElement('div');
+    uiState.overlay.id = 'prd-stv-cmd-bar-overlay';
 
     const container = document.createElement('div');
     container.id = 'prd-stv-cmd-bar-container';
 
-    input = document.createElement('input');
-    input.id = 'prd-stv-cmd-bar-input';
-    input.type = 'text';
-    input.placeholder = 'Type to search tabs, bookmarks, history...';
+    uiState.input = document.createElement('input');
+    uiState.input.id = 'prd-stv-cmd-bar-input';
+    uiState.input.type = 'text';
+    uiState.input.placeholder = 'Type to search tabs, bookmarks, history...';
 
-    listEl = document.createElement('div');
-    listEl.id = 'prd-stv-cmd-bar-list';
+    uiState.listEl = document.createElement('div');
+    uiState.listEl.id = 'prd-stv-cmd-bar-list';
 
+    uiState.confirmEl = document.createElement('div');
+    uiState.confirmEl.id = 'prd-stv-cmd-confirm';
+    uiState.confirmEl.style.display = 'none';
+    
+    // Update legacy references
+    overlay = uiState.overlay;
+    input = uiState.input;
+    listEl = uiState.listEl;
+    confirmEl = uiState.confirmEl;
 
-    confirmEl = document.createElement('div');
-    confirmEl.id = 'prd-stv-cmd-confirm';
-    confirmEl.style.display = 'none';
-
-    container.appendChild(input);
-    container.appendChild(listEl);
-    container.appendChild(confirmEl);
-    overlay.appendChild(container);
+    container.appendChild(uiState.input);
+    container.appendChild(uiState.listEl);
+    container.appendChild(uiState.confirmEl);
+    uiState.overlay.appendChild(container);
 
     // Close overlay when user clicks outside the container
-    overlay.addEventListener('mousedown', (ev) => {
-      if (ev.target === overlay) {
+    uiState.overlay.addEventListener('mousedown', (ev) => {
+      if (ev.target === uiState.overlay) {
         destroyOverlay();
       }
     });
     // Prevent clicks inside the container from bubbling to overlay handler
     container.addEventListener('mousedown', (ev) => ev.stopPropagation());
 
-    document.body.appendChild(overlay);
+    document.body.appendChild(uiState.overlay);
 
     // listeners
-    input.addEventListener('keydown', onKeyDown);
+    uiState.input.addEventListener('keydown', onKeyDown);
     document.addEventListener('keydown', onGlobalKeyDown);
     document.addEventListener('keyup', onGlobalKeyUp);
-    input.addEventListener('input', onInput);
-    input.focus();
+    uiState.input.addEventListener('input', onInput);
+    uiState.input.focus();
 
     // initial recent
-    chrome.runtime.sendMessage({ type: 'RECENT' }, (res) => {
-      items = res || [];
-      selectedIdx = -1;
+    messageService.recent((res) => {
+      uiState.setItems(res);
+      items = uiState.items;
+      selectedIdx = uiState.selectedIdx;
       renderList();
     });
   }
@@ -72,7 +143,8 @@ function createOverlay() {
     cancelAutoOpen();
     document.removeEventListener('keydown', onGlobalKeyDown);
     document.removeEventListener('keyup', onGlobalKeyUp);
-    overlay?.remove();
+    uiState.overlay?.remove();
+    uiState.overlay = null;
     overlay = null;
   }
 
@@ -103,21 +175,15 @@ function onGlobalKeyDown(e) {
     handleKey(e);
   }
 
-  // Simplified and centralized key handling
-  function handleKey(e) {
-    // Always allow Esc to close the palette
-    if (e.key === 'Escape') {
+  // Key handler functions - Split for better SRP compliance
+  const keyHandlers = {
+    escape: () => {
       destroyOverlay();
-      return;
-    }
-
-    // Ignore all other keys if the palette isn't open
-    if (!overlay) return;
-
-    /* -----------------
-       Navigation keys
-       ----------------- */
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    },
+    
+    navigation: (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return false;
+      
       e.preventDefault();
       hideDeleteConfirm();
       removeProgressBars();
@@ -127,37 +193,42 @@ function onGlobalKeyDown(e) {
       renderList();
       cancelAutoOpen();
 
-      // Blur input so backspace won"t edit text
+      // Blur input so backspace won't edit text
       if (document.activeElement === input) input.blur();
-      return;
-    }
-
-    // Cmd/Ctrl + Up focuses input
-    if (e.metaKey && e.key === 'ArrowUp') {
-      e.preventDefault();
-      input.focus();
-      return;
-    }
-
-    // Cmd/Ctrl + Down jumps to last item
-    if (e.metaKey && e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (items.length) {
-        selectedIdx = items.length - 1;
-        renderList();
-        cancelAutoOpen();
-        input.blur();
+      return true;
+    },
+    
+    metaNavigation: (e) => {
+      if (!e.metaKey) return false;
+      
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        input.focus();
+        return true;
       }
-      return;
-    }
-
-    /* -----------------
-       Deletion (Backspace)
-       ----------------- */
-    if (e.key === 'Backspace' && (document.activeElement !== input || input.value === '')) {
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (items.length) {
+          selectedIdx = items.length - 1;
+          renderList();
+          cancelAutoOpen();
+          input.blur();
+        }
+        return true;
+      }
+      
+      return false;
+    },
+    
+    deletion: (e) => {
+      if (e.key !== 'Backspace' || (document.activeElement === input && input.value !== '')) {
+        return false;
+      }
+      
       e.preventDefault();
       const item = items[selectedIdx];
-      if (!item) return;
+      if (!item) return true;
 
       if (!deleteConfirm || lastConfirmIdx !== selectedIdx) {
         // First press shows confirmation + bounce
@@ -166,37 +237,61 @@ function onGlobalKeyDown(e) {
         showDeleteConfirm();
       } else {
         // Second press performs deletion
-        chrome.runtime.sendMessage({ type: 'DELETE', item });
+        messageService.delete(item);
         hideDeleteConfirm();
-
-        const el = listEl.querySelector(`[data-idx=\"${selectedIdx}\"]`);
-        if (el) {
-          el.classList.add('prd-stv-remove');
-          el.addEventListener('animationend', () => {
-            items.splice(selectedIdx, 1);
-            if (selectedIdx >= items.length) selectedIdx = items.length - 1;
-            renderList();
-          }, { once: true });
-        } else {
-          items.splice(selectedIdx, 1);
-          if (selectedIdx >= items.length) selectedIdx = items.length - 1;
-          renderList();
-        }
+        performItemDeletion();
       }
-      return;
-    }
-
-    /* -----------------
-       Activate (Enter)
-       ----------------- */
-    if (e.key === 'Enter') {
+      return true;
+    },
+    
+    activation: (e) => {
+      if (e.key !== 'Enter') return false;
+      
       e.preventDefault();
       const item = items[selectedIdx];
       if (item) {
-        chrome.runtime.sendMessage({ type: 'OPEN', item });
+        messageService.open(item);
         destroyOverlay();
       }
+      return true;
     }
+  };
+  
+  // Extracted deletion animation logic
+  function performItemDeletion() {
+    const el = listEl.querySelector(`[data-idx="${selectedIdx}"]`);
+    if (el) {
+      el.classList.add('prd-stv-remove');
+      el.addEventListener('animationend', () => {
+        removeItemFromList();
+      }, { once: true });
+    } else {
+      removeItemFromList();
+    }
+  }
+  
+  function removeItemFromList() {
+    items.splice(selectedIdx, 1);
+    if (selectedIdx >= items.length) selectedIdx = items.length - 1;
+    renderList();
+  }
+
+  // Simplified and centralized key handling
+  function handleKey(e) {
+    // Always allow Esc to close the palette
+    if (e.key === 'Escape') {
+      keyHandlers.escape();
+      return;
+    }
+
+    // Ignore all other keys if the palette isn't open
+    if (!overlay) return;
+
+    // Try each handler in order
+    if (keyHandlers.navigation(e)) return;
+    if (keyHandlers.metaNavigation(e)) return;
+    if (keyHandlers.deletion(e)) return;
+    if (keyHandlers.activation(e)) return;
   }
 
   function handleKeyUp(e) {
@@ -205,7 +300,7 @@ function onGlobalKeyDown(e) {
     if (['Meta', 'Alt', 'Control'].includes(e.key)) {
       const item = items[selectedIdx];
       if (item) {
-        chrome.runtime.sendMessage({ type: 'OPEN', item });
+        messageService.open(item);
         destroyOverlay();
       }
     }
@@ -217,51 +312,56 @@ function onInput(e) {
     cancelAutoOpen();
     const q = input.value.trim();
     if (!q) {
-      chrome.runtime.sendMessage({ type: 'RECENT' }, (res) => {
-        items = res || [];
-        selectedIdx = -1;
+      messageService.recent((res) => {
+        uiState.setItems(res);
+        items = uiState.items;
+        selectedIdx = uiState.selectedIdx;
         renderList();
       });
       return;
     }
-    chrome.runtime.sendMessage({ type: 'SEARCH', query: q }, (res) => {
-      items = res || [];
-      selectedIdx = -1;
+    messageService.search(q, (res) => {
+      uiState.setItems(res);
+      items = uiState.items;
+      selectedIdx = uiState.selectedIdx;
       renderList();
     });
   }
 
 function hideDeleteConfirm() {
+    uiState.deleteConfirm = false;
     deleteConfirm = false;
-    if (confirmTimer) {
-      clearTimeout(confirmTimer);
+    if (uiState.confirmTimer) {
+      clearTimeout(uiState.confirmTimer);
+      uiState.confirmTimer = null;
       confirmTimer = null;
     }
-    if (confirmEl) {
-      confirmEl.style.display = 'none';
-      confirmEl.textContent = '';
+    if (uiState.confirmEl) {
+      uiState.confirmEl.style.display = 'none';
+      uiState.confirmEl.textContent = '';
     }
   }
 
 function removeProgressBars() {
-    listEl?.querySelectorAll('.prd-stv-prog').forEach(el => el.remove());
+    uiState.listEl?.querySelectorAll('.prd-stv-prog').forEach(el => el.remove());
   }
 
   function cancelAutoOpen() {
-    if (idleTimer) {
-      clearTimeout(idleTimer);
+    if (uiState.idleTimer) {
+      clearTimeout(uiState.idleTimer);
+      uiState.idleTimer = null;
       idleTimer = null;
     }
-removeProgressBars();
+    removeProgressBars();
   }
 
 function showDeleteConfirm() {
-    if (!confirmEl) return;
-    confirmEl.textContent = 'Press backspace again to confirm';
-    confirmEl.style.display = 'block';
+    if (!uiState.confirmEl) return;
+    uiState.confirmEl.textContent = 'Press backspace again to confirm';
+    uiState.confirmEl.style.display = 'block';
 
     // Bounce animation on the currently selected item
-    const activeEl = listEl?.querySelector('.prd-stv-cmd-item.prd-stv-active');
+    const activeEl = uiState.listEl?.querySelector('.prd-stv-cmd-item.prd-stv-active');
     if (activeEl) {
       activeEl.classList.add('prd-stv-bounce');
       activeEl.addEventListener('animationend', () => {
@@ -269,75 +369,100 @@ function showDeleteConfirm() {
       }, { once: true });
     }
 
-    confirmTimer = setTimeout(() => hideDeleteConfirm(), 2000);
-  }
-
-function startItemProgress() {
-    removeProgressBars();
-    const activeEl = listEl?.querySelector('.prd-stv-cmd-item.prd-stv-active');
-    if (!activeEl) return;
-    const bar = document.createElement('div');
-    bar.className = 'prd-stv-prog';
-    activeEl.appendChild(bar);
-    void bar.offsetWidth;
-    bar.classList.add('prd-stv-run');
-  }
-
-  function startTimerAnimation() {
-    if (!timerEl) return;
-    timerEl.style.display = 'block';
-timerEl.classList.remove('prd-stv-run');
-    timerEl.style.width = '100%'; // reset so animation restarts from full
-    void timerEl.offsetWidth; // force reflow to restart animation
-    timerEl.classList.add('prd-stv-run');
+    uiState.confirmTimer = setTimeout(() => hideDeleteConfirm(), CONSTANTS.CONFIRM_TIMEOUT);
+    confirmTimer = uiState.confirmTimer;
   }
 
 
-  function renderList() {
-    listEl.innerHTML = '';
-    items.forEach((it, idx) => {
-const div = document.createElement('div');
-      div.className = 'prd-stv-cmd-item' + (idx === selectedIdx ? ' prd-stv-active' : '');
-      div.dataset.idx = idx;
-      const iconHtml = getIconHtml(it);
-      div.innerHTML = `
-        <div style="display:flex;">
-          ${iconHtml}
-          <div style="display:flex;flex-direction:column;">
-            <span>${highlightMatches(it.title || it.url, input?.value.trim())}</span>
-            <span class="prd-stv-url">${getSubtitle(it)}</span>
-          </div>
+
+
+  // Extracted item rendering logic for better modularity
+  function createItemElement(item, index) {
+    const div = document.createElement('div');
+    div.className = 'prd-stv-cmd-item' + (index === selectedIdx ? ' prd-stv-active' : '');
+    div.dataset.idx = index;
+    
+    const iconHtml = getIconHtml(item);
+    div.innerHTML = `
+      <div style="display:flex;">
+        ${iconHtml}
+        <div style="display:flex;flex-direction:column;">
+          <span>${highlightMatches(item.title || item.url, input?.value.trim())}</span>
+          <span class="prd-stv-url">${getSubtitle(item)}</span>
         </div>
-      `;
-      
-      // Add error handling for favicon images
-      const favicon = div.querySelector('.prd-stv-favicon');
-      if (favicon) {
-        favicon.addEventListener('error', () => {
-          favicon.style.display = 'none';
-        });
-      }
-      
-      div.addEventListener('click', () => {
-        chrome.runtime.sendMessage({ type: 'OPEN', item: it });
-        destroyOverlay();
-      });
-      listEl.appendChild(div);
+      </div>
+    `;
+    
+    // Add error handling for favicon images
+    const favicon = div.querySelector('.prd-stv-favicon');
+    if (favicon) {
+      favicon.addEventListener('error', () => {
+        // Stop further reload attempts and display fallback once
+        favicon.removeAttribute('data-src');
+        favicon.src = CONSTANTS.FALLBACK_ICON;
+      }, { once: true });
+    }
+    
+    // Add click handler
+    div.addEventListener('click', () => {
+      messageService.open(item);
+      destroyOverlay();
     });
-
-    // Ensure the selected item is visible within the scroll container
+    
+    return div;
+  }
+  
+  function scrollToActiveItem() {
     const activeEl = listEl.querySelector('.prd-stv-cmd-item.prd-stv-active');
     if (activeEl) {
       activeEl.scrollIntoView({ block: 'nearest' });
     }
   }
 
+  function renderList() {
+    listEl.innerHTML = '';
+    
+    items.forEach((item, index) => {
+      const itemElement = createItemElement(item, index);
+      listEl.appendChild(itemElement);
+    });
+
+    // Ensure the selected item is visible within the scroll container
+    scrollToActiveItem();
+
+    // Lazily load any favicons that have data-src
+    lazyLoadFavicons();
+  }
+
 function getIconHtml(it) {
-    const src = it.icon || '';
-    if (src) {
-      return `<img class="prd-stv-favicon" src="${src}" />`;
+    const actual = it.icon || '';
+    if (actual) {
+      // Render placeholder immediately; real favicon swapped lazily
+return `<img class="prd-stv-favicon" src="${CONSTANTS.FALLBACK_ICON}" data-src="${actual}" />`;
     }
-    return '<span class="material-symbols-outlined prd-stv-icon">public</span>';
+    // No favicon available → just placeholder
+return `<img class="prd-stv-favicon" src="${CONSTANTS.FALLBACK_ICON}" />`;
+  }
+
+  // Swap in real favicons after initial render without blocking first paint
+  function lazyLoadFavicons() {
+    const imgs = listEl?.querySelectorAll('img.prd-stv-favicon[data-src]');
+    if (!imgs || imgs.length === 0) return;
+
+    const load = () => {
+      imgs.forEach(img => {
+        if (img.dataset.src) {
+          img.src = img.dataset.src;
+          img.removeAttribute('data-src');
+        }
+      });
+    };
+
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(load, { timeout: 1000 });
+    } else {
+      setTimeout(load, 0);
+    }
   }
 
   function typeGlyph(it) {
@@ -398,7 +523,7 @@ function getIconHtml(it) {
   // Truncate long strings in the middle so they fit on a single line
   // Example: "https://verylongdomain.com/path/to/resource" (maxLen 40)
   // becomes "https://verylo.../path/to/resource"
-  function truncateMiddle(str, maxLen = 60) {
+  function truncateMiddle(str, maxLen = CONSTANTS.MAX_SUBTITLE_LENGTH) {
     if (!str || str.length <= maxLen) return str || '';
     const part = Math.floor((maxLen - 3) / 2);
     return str.slice(0, part) + '...' + str.slice(str.length - part);
