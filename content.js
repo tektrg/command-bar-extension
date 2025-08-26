@@ -3,7 +3,7 @@
   if (window.__cmdBarInjected) return;
   window.__cmdBarInjected = true;
 
-let overlay, input, listEl, timerEl, confirmEl, items = [], selectedIdx = -1, idleTimer = null;
+let overlay, input, listEl, confirmEl, items = [], selectedIdx = -1, idleTimer = null;
 // Deletion confirmation state
 let deleteConfirm = false;
 let lastConfirmIdx = -1;
@@ -11,37 +11,34 @@ let confirmTimer = null;
 
 function createOverlay() {
     // load material icons once
-    if (!document.getElementById('cmd-bar-icons')) {
+    if (!document.getElementById('prd-stv-cmd-bar-icons')) {
       const link = document.createElement('link');
-      link.id = 'cmd-bar-icons';
+      link.id = 'prd-stv-cmd-bar-icons';
       link.rel = 'stylesheet';
       link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&icon_names=bookmark,history,public';
       document.head.appendChild(link);
     }
     overlay = document.createElement('div');
-    overlay.id = 'cmd-bar-overlay';
+    overlay.id = 'prd-stv-cmd-bar-overlay';
 
     const container = document.createElement('div');
-    container.id = 'cmd-bar-container';
+    container.id = 'prd-stv-cmd-bar-container';
 
     input = document.createElement('input');
-    input.id = 'cmd-bar-input';
+    input.id = 'prd-stv-cmd-bar-input';
     input.type = 'text';
     input.placeholder = 'Type to search tabs, bookmarks, history...';
 
     listEl = document.createElement('div');
-    listEl.id = 'cmd-bar-list';
+    listEl.id = 'prd-stv-cmd-bar-list';
 
-timerEl = document.createElement('div');
-    timerEl.id = 'cmd-timer';
 
     confirmEl = document.createElement('div');
-    confirmEl.id = 'cmd-confirm';
+    confirmEl.id = 'prd-stv-cmd-confirm';
     confirmEl.style.display = 'none';
 
     container.appendChild(input);
     container.appendChild(listEl);
-container.appendChild(timerEl);
     container.appendChild(confirmEl);
     overlay.appendChild(container);
 
@@ -71,9 +68,6 @@ container.appendChild(timerEl);
   }
 
   function destroyOverlay() {
-    if (timerEl) {
-      timerEl.classList.remove('run');
-    }
     cancelAutoOpen();
     document.removeEventListener('keydown', onGlobalKeyDown);
     overlay?.remove();
@@ -136,6 +130,7 @@ function onGlobalKeyDown(e) {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
 hideDeleteConfirm();
+      removeProgressBars();
       selectedIdx = (selectedIdx + 1) % items.length;
       renderList();
       cancelAutoOpen();
@@ -145,6 +140,7 @@ hideDeleteConfirm();
     if (e.key === 'ArrowUp') {
       e.preventDefault();
 hideDeleteConfirm();
+        removeProgressBars();
       selectedIdx = (selectedIdx - 1 + items.length) % items.length;
       renderList();
       cancelAutoOpen();
@@ -163,12 +159,22 @@ hideDeleteConfirm();
         showDeleteConfirm();
       } else {
         // Second press -> perform deletion
-        chrome.runtime.sendMessage({ type: 'DELETE', item });
+chrome.runtime.sendMessage({ type: 'DELETE', item });
         hideDeleteConfirm();
-        // Optionally remove from list locally for immediate feedback
-        items.splice(selectedIdx, 1);
-        if (selectedIdx >= items.length) selectedIdx = items.length - 1;
-        renderList();
+
+        const el = listEl.querySelector(`[data-idx="${selectedIdx}"]`);
+        if (el) {
+          el.classList.add('prd-stv-remove');
+          el.addEventListener('animationend', () => {
+            items.splice(selectedIdx, 1);
+            if (selectedIdx >= items.length) selectedIdx = items.length - 1;
+            renderList();
+          }, { once: true });
+        } else {
+          items.splice(selectedIdx, 1);
+          if (selectedIdx >= items.length) selectedIdx = items.length - 1;
+          renderList();
+        }
       }
       return;
     }
@@ -215,11 +221,8 @@ function hideDeleteConfirm() {
     }
   }
 
-  function hideVisualTimer() {
-    if (timerEl) {
-      timerEl.classList.remove('run');
-      timerEl.style.display = 'none';
-    }
+function removeProgressBars() {
+    listEl?.querySelectorAll('.prd-stv-prog').forEach(el => el.remove());
   }
 
   function cancelAutoOpen() {
@@ -227,27 +230,49 @@ function hideDeleteConfirm() {
       clearTimeout(idleTimer);
       idleTimer = null;
     }
-    hideVisualTimer();
+removeProgressBars();
   }
 
-  function showDeleteConfirm() {
+function showDeleteConfirm() {
     if (!confirmEl) return;
     confirmEl.textContent = 'Press backspace again to confirm';
     confirmEl.style.display = 'block';
+
+    // Bounce animation on the currently selected item
+    const activeEl = listEl?.querySelector('.prd-stv-cmd-item.prd-stv-active');
+    if (activeEl) {
+      activeEl.classList.add('prd-stv-bounce');
+      activeEl.addEventListener('animationend', () => {
+        activeEl.classList.remove('prd-stv-bounce');
+      }, { once: true });
+    }
+
     confirmTimer = setTimeout(() => hideDeleteConfirm(), 2000);
+  }
+
+function startItemProgress() {
+    removeProgressBars();
+    const activeEl = listEl?.querySelector('.prd-stv-cmd-item.prd-stv-active');
+    if (!activeEl) return;
+    const bar = document.createElement('div');
+    bar.className = 'prd-stv-prog';
+    activeEl.appendChild(bar);
+    void bar.offsetWidth;
+    bar.classList.add('prd-stv-run');
   }
 
   function startTimerAnimation() {
     if (!timerEl) return;
     timerEl.style.display = 'block';
-    timerEl.classList.remove('run');
+timerEl.classList.remove('prd-stv-run');
+    timerEl.style.width = '100%'; // reset so animation restarts from full
     void timerEl.offsetWidth; // force reflow to restart animation
-    timerEl.classList.add('run');
+    timerEl.classList.add('prd-stv-run');
   }
 
   function scheduleAutoOpen() {
     clearTimeout(idleTimer);
-    startTimerAnimation();
+startItemProgress();
     idleTimer = setTimeout(() => {
       const item = items[selectedIdx];
       if (item) {
@@ -260,21 +285,22 @@ function hideDeleteConfirm() {
   function renderList() {
     listEl.innerHTML = '';
     items.forEach((it, idx) => {
-      const div = document.createElement('div');
-      div.className = 'cmd-item' + (idx === selectedIdx ? ' active' : '');
+const div = document.createElement('div');
+      div.className = 'prd-stv-cmd-item' + (idx === selectedIdx ? ' prd-stv-active' : '');
+      div.dataset.idx = idx;
       const iconHtml = getIconHtml(it);
       div.innerHTML = `
         <div style="display:flex;">
           ${iconHtml}
           <div style="display:flex;flex-direction:column;">
             <span>${highlightMatches(it.title || it.url, input?.value.trim())}</span>
-            <span class="url">${getSubtitle(it)}</span>
+            <span class="prd-stv-url">${getSubtitle(it)}</span>
           </div>
         </div>
       `;
       
       // Add error handling for favicon images
-      const favicon = div.querySelector('.favicon');
+      const favicon = div.querySelector('.prd-stv-favicon');
       if (favicon) {
         favicon.addEventListener('error', () => {
           favicon.style.display = 'none';
@@ -289,7 +315,7 @@ function hideDeleteConfirm() {
     });
 
     // Ensure the selected item is visible within the scroll container
-    const activeEl = listEl.querySelector('.cmd-item.active');
+    const activeEl = listEl.querySelector('.prd-stv-cmd-item.prd-stv-active');
     if (activeEl) {
       activeEl.scrollIntoView({ block: 'nearest' });
     }
@@ -298,9 +324,9 @@ function hideDeleteConfirm() {
 function getIconHtml(it) {
     const src = it.icon || '';
     if (src) {
-      return `<img class="favicon" src="${src}" />`;
+      return `<img class="prd-stv-favicon" src="${src}" />`;
     }
-    return '<span class="material-symbols-outlined icon">public</span>';
+    return '<span class="material-symbols-outlined prd-stv-icon">public</span>';
   }
 
   function typeGlyph(it) {
@@ -353,7 +379,7 @@ function getIconHtml(it) {
     const safeQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     try {
       const regex = new RegExp(safeQuery, 'ig');
-      return escaped.replace(regex, (m) => `<span class="hl">${m}</span>`);
+      return escaped.replace(regex, (m) => `<span class="prd-stv-hl">${m}</span>`);
     } catch (e) {
       return escaped;
     }
