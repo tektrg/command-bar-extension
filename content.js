@@ -56,6 +56,7 @@ function createOverlay() {
     // listeners
     input.addEventListener('keydown', onKeyDown);
     document.addEventListener('keydown', onGlobalKeyDown);
+    document.addEventListener('keyup', onGlobalKeyUp);
     input.addEventListener('input', onInput);
     input.focus();
 
@@ -70,6 +71,7 @@ function createOverlay() {
   function destroyOverlay() {
     cancelAutoOpen();
     document.removeEventListener('keydown', onGlobalKeyDown);
+    document.removeEventListener('keyup', onGlobalKeyUp);
     overlay?.remove();
     overlay = null;
   }
@@ -82,14 +84,19 @@ function toggleOverlay() {
     }
     // Overlay already visible -> move selection down and schedule auto-open
     if (items.length === 0) return;
+    input.blur();
     selectedIdx = (selectedIdx + 1) % items.length;
     renderList();
-    scheduleAutoOpen();
   }
 
 function onGlobalKeyDown(e) {
     if (e.target === input) return; // already handled by onKeyDown
     handleKey(e);
+  }
+
+  function onGlobalKeyUp(e) {
+    if (e.target === input) return;
+    handleKeyUp(e);
   }
 
   function onKeyDown(e) {
@@ -189,6 +196,18 @@ chrome.runtime.sendMessage({ type: 'DELETE', item });
     }
   }
 
+  function handleKeyUp(e) {
+    // Open tab when the modifier/shortcut key is released (e.g., Meta, Alt, Control)
+    if (!overlay) return;
+    if (['Meta', 'Alt', 'Control'].includes(e.key)) {
+      const item = items[selectedIdx];
+      if (item) {
+        chrome.runtime.sendMessage({ type: 'OPEN', item });
+        destroyOverlay();
+      }
+    }
+  }
+
 function onInput(e) {
     hideDeleteConfirm();
     // User is typing -> cancel pending auto open
@@ -270,17 +289,6 @@ timerEl.classList.remove('prd-stv-run');
     timerEl.classList.add('prd-stv-run');
   }
 
-  function scheduleAutoOpen() {
-    clearTimeout(idleTimer);
-startItemProgress();
-    idleTimer = setTimeout(() => {
-      const item = items[selectedIdx];
-      if (item) {
-        chrome.runtime.sendMessage({ type: 'OPEN', item });
-        destroyOverlay();
-      }
-    }, 1000);
-  }
 
   function renderList() {
     listEl.innerHTML = '';
