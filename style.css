@@ -134,8 +134,8 @@
 }
 
 @keyframes prd-stv-fadeSlideOut {
-  0% { opacity: 1 translateX(0); }
-  100% { opacity: 0 translateX(-10  0px); }
+  0% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0;transform: translateX(-100px); }
 }
 
 /* Bounce (shake) animation for first delete press */
