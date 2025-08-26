@@ -36,8 +36,14 @@
     "default_title": "Command Bar"
   },
   "content_security_policy": {
-  "extension_pages": "script-src 'self'; object-src 'self'; font-src 'self' https://fonts.gstatic.com"
-}
+    "extension_pages": "script-src 'self'; object-src 'self'; font-src 'self' https://fonts.gstatic.com"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["link_18dp_E3E3E3.svg"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 
 }
 
