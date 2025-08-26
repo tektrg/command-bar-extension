@@ -1,5 +1,5 @@
 /* style.css */
-#cmd-bar-overlay {
+#prd-stv-cmd-bar-overlay {
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
@@ -14,7 +14,7 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
 
-#cmd-bar-container {
+#prd-stv-cmd-bar-container {
   min-width: 600px !important;
   max-width: 900px !important;
   width: 70%;
@@ -25,7 +25,7 @@
   color: #f5f5f5 !important;
 }
 
-#cmd-bar-input {
+#prd-stv-cmd-bar-input {
   width: 100% !important;
   height: 50px !important;
   box-sizing: border-box !important;
@@ -38,31 +38,30 @@
   color: #fff !important;
 }
 
-#cmd-timer {
-  height: 2px !important;
-  background: #c2c2c2 !important;
-  width: 100% !important;
-  transform-origin: left !important;
-  display: none !important;
+/* Item-level progress bar */
+.prd-stv-prog {
+  height: 2px;
+  width: 0;
+  background: #c2c2c2;
+  margin-top: 4px;
 }
 
-#cmd-timer.run {
-  display: block !important;
-  animation: cmdTimerShrink 1s linear forwards !important;
+.prd-stv-prog.prd-stv-run {
+  animation: prd-stv-fill 1s linear forwards;
 }
 
-@keyframes cmdTimerShrink {
-  from { width: 100%; }
-  to { width: 0%; }
+@keyframes prd-stv-fill {
+  from { width: 0%; }
+  to   { width: 100%; }
 }
 
-#cmd-bar-list {
+#prd-stv-cmd-bar-list {
   margin-top: 12px !important;
   max-height: 300px !important;
   overflow-y: auto !important;
 }
 
-.cmd-item {
+.prd-stv-cmd-item {
   display: flex !important;
   font-size: 16px !important;
   align-items: flex-start !important;
@@ -72,7 +71,7 @@
   flex-direction: column !important;
 }
 
-.icon, img.favicon {
+.prd-stv-icon, img.prd-stv-favicon {
   width: 16px !important;
   height: 16px !important;
   margin-top: 5px !important;
@@ -81,12 +80,15 @@
   border-radius: 2px !important;
 }
 
-.cmd-item:hover,
-.cmd-item.active {
+.prd-stv-cmd-item:hover {
+  background: #353535 !important; /* lighter hover color */
+}
+
+.prd-stv-cmd-item.prd-stv-active {
   background: #191919 !important;
 }
 
-.cmd-item .url {
+.prd-stv-cmd-item .prd-stv-url {
   font-size: 12px !important;
   color: #4d4d4d !important;
   display: flex !important;
@@ -95,8 +97,55 @@
 }
 
 /* Highlighted query text */
-.hl {
+.prd-stv-hl {
   text-decoration: underline;
   text-decoration-color: #b9a079;
+}
+
+/* --------------------
+   Smooth subtle transitions
+   -------------------- */
+
+/* Fade in the dimmed overlay */
+#prd-stv-cmd-bar-overlay {
+  animation: prd-stv-fadeIn 0.18s ease-out;
+}
+
+@keyframes prd-stv-fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Pop-in animation for the command palette container */
+#prd-stv-cmd-bar-container {
+  animation: prd-stv-popIn 0.18s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+@keyframes prd-stv-popIn {
+  0%   { transform: scale(0.96) translateY(8px); opacity: 0; }
+  100% { transform: scale(1) translateY(0);   opacity: 1; }
+}
+
+
+/* Animate removal of a list item (delete) */
+.prd-stv-cmd-item.prd-stv-remove {
+  pointer-events: none;
+  animation: prd-stv-fadeSlideOut 0.2s ease-in-out;
+}
+
+@keyframes prd-stv-fadeSlideOut {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Bounce (shake) animation for first delete press */
+.prd-stv-bounce {
+  animation: prd-stv-bounce 0.35s ease-in-out;
+}
+
+@keyframes prd-stv-bounce {
+  0%   { transform: translateX(0); }
+  50%  { transform: translateX(-4px); }
+  100% { transform: translateX(0); }
 }
 
