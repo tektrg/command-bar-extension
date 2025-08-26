@@ -103,25 +103,43 @@ function onGlobalKeyDown(e) {
     handleKey(e);
   }
 
+  // Simplified and centralized key handling
   function handleKey(e) {
+    // Always allow Esc to close the palette
     if (e.key === 'Escape') {
       destroyOverlay();
       return;
     }
 
-// If user navigates with arrows, blur input so backspace won't edit text
-    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && document.activeElement === input) {
-      input.blur();
+    // Ignore all other keys if the palette isn't open
+    if (!overlay) return;
+
+    /* -----------------
+       Navigation keys
+       ----------------- */
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      hideDeleteConfirm();
+      removeProgressBars();
+
+      const dir = e.key === 'ArrowDown' ? 1 : -1;
+      selectedIdx = (selectedIdx + dir + items.length) % items.length;
+      renderList();
+      cancelAutoOpen();
+
+      // Blur input so backspace won"t edit text
+      if (document.activeElement === input) input.blur();
+      return;
     }
 
-// Mac Cmd+Up focuses input
+    // Cmd/Ctrl + Up focuses input
     if (e.metaKey && e.key === 'ArrowUp') {
       e.preventDefault();
       input.focus();
       return;
     }
 
-    // Mac Cmd+Down selects last item
+    // Cmd/Ctrl + Down jumps to last item
     if (e.metaKey && e.key === 'ArrowDown') {
       e.preventDefault();
       if (items.length) {
@@ -133,43 +151,25 @@ function onGlobalKeyDown(e) {
       return;
     }
 
-// Reset delete confirmation on navigation
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-hideDeleteConfirm();
-      removeProgressBars();
-      selectedIdx = (selectedIdx + 1) % items.length;
-      renderList();
-      cancelAutoOpen();
-      return;
-    }
-
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-hideDeleteConfirm();
-        removeProgressBars();
-      selectedIdx = (selectedIdx - 1 + items.length) % items.length;
-      renderList();
-      cancelAutoOpen();
-      return;
-    }
-
-// Handle deletion via Backspace when input field is empty OR not focused
+    /* -----------------
+       Deletion (Backspace)
+       ----------------- */
     if (e.key === 'Backspace' && (document.activeElement !== input || input.value === '')) {
       e.preventDefault();
       const item = items[selectedIdx];
       if (!item) return;
-      // First press -> show confirm message
+
       if (!deleteConfirm || lastConfirmIdx !== selectedIdx) {
+        // First press shows confirmation + bounce
         deleteConfirm = true;
         lastConfirmIdx = selectedIdx;
         showDeleteConfirm();
       } else {
-        // Second press -> perform deletion
-chrome.runtime.sendMessage({ type: 'DELETE', item });
+        // Second press performs deletion
+        chrome.runtime.sendMessage({ type: 'DELETE', item });
         hideDeleteConfirm();
 
-        const el = listEl.querySelector(`[data-idx="${selectedIdx}"]`);
+        const el = listEl.querySelector(`[data-idx=\"${selectedIdx}\"]`);
         if (el) {
           el.classList.add('prd-stv-remove');
           el.addEventListener('animationend', () => {
@@ -186,6 +186,9 @@ chrome.runtime.sendMessage({ type: 'DELETE', item });
       return;
     }
 
+    /* -----------------
+       Activate (Enter)
+       ----------------- */
     if (e.key === 'Enter') {
       e.preventDefault();
       const item = items[selectedIdx];
