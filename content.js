@@ -28,7 +28,7 @@ const uiState = {
   overlay: null,
   input: null,
   listEl: null,
-  confirmEl: null,
+  statusBar: null,
   items: [],
   selectedIdx: -1,
   idleTimer: null,
@@ -62,7 +62,7 @@ const uiState = {
 };
 
 // Legacy global variables for backward compatibility
-let overlay, input, listEl, confirmEl, items, selectedIdx, idleTimer;
+let overlay, input, listEl, statusBar, items, selectedIdx, idleTimer;
 let deleteConfirm, lastConfirmIdx, confirmTimer;
 
 function createOverlay() {
@@ -70,7 +70,7 @@ function createOverlay() {
     overlay = uiState.overlay;
     input = uiState.input;
     listEl = uiState.listEl;
-    confirmEl = uiState.confirmEl;
+    statusBar = uiState.statusBar;
     items = uiState.items;
     selectedIdx = uiState.selectedIdx;
     deleteConfirm = uiState.deleteConfirm;
@@ -91,20 +91,20 @@ function createOverlay() {
     uiState.listEl = document.createElement('div');
     uiState.listEl.id = 'prd-stv-cmd-bar-list';
 
-    uiState.confirmEl = document.createElement('div');
-    uiState.confirmEl.id = 'prd-stv-status-bar';
-    uiState.confirmEl.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
-    uiState.confirmEl.style.display = 'block';
+    uiState.statusBar = document.createElement('div');
+    uiState.statusBar.id = 'prd-stv-status-bar';
+    uiState.statusBar.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
+    uiState.statusBar.style.display = 'block';
     
     // Update legacy references
     overlay = uiState.overlay;
     input = uiState.input;
     listEl = uiState.listEl;
-    confirmEl = uiState.confirmEl;
+    statusBar = uiState.statusBar;
 
     container.appendChild(uiState.input);
     container.appendChild(uiState.listEl);
-    container.appendChild(uiState.confirmEl);
+    container.appendChild(uiState.statusBar);
     uiState.overlay.appendChild(container);
 
     // Close overlay when user clicks outside the container
@@ -184,7 +184,29 @@ function onGlobalKeyDown(e) {
       removeProgressBars();
 
       const dir = e.key === 'ArrowDown' ? 1 : -1;
-      selectedIdx = (selectedIdx + dir + items.length) % items.length;
+      
+      // Handle boundary cases - focus input when at edges
+      if (e.key === 'ArrowUp' && selectedIdx === 0) {
+        selectedIdx = -1;
+        renderList();
+        input.focus();
+        return true;
+      }
+      
+      if (e.key === 'ArrowDown' && selectedIdx === items.length - 1) {
+        selectedIdx = -1;
+        renderList();
+        input.focus();
+        return true;
+      }
+      
+      // Handle navigation from input (selectedIdx === -1)
+      if (selectedIdx === -1) {
+        selectedIdx = e.key === 'ArrowDown' ? 0 : items.length - 1;
+      } else {
+        selectedIdx = (selectedIdx + dir + items.length) % items.length;
+      }
+      
       renderList();
       cancelAutoOpen();
 
@@ -342,10 +364,10 @@ function hideDeleteConfirm() {
       uiState.confirmTimer = null;
       confirmTimer = null;
     }
-    if (uiState.confirmEl) {
-      uiState.confirmEl.style.display = 'block';
-      uiState.confirmEl.classList.remove('confirm')
-      uiState.confirmEl.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
+    if (uiState.statusBar) {
+      uiState.statusBar.style.display = 'block';
+      uiState.statusBar.classList.remove('confirm')
+      uiState.statusBar.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
     }
   }
 
@@ -363,10 +385,10 @@ function removeProgressBars() {
   }
 
 function showDeleteConfirm() {
-    if (!uiState.confirmEl) return;
-    uiState.confirmEl.textContent = 'Press backspace again to confirm';
-    uiState.confirmEl.classList.add('confirm')
-    uiState.confirmEl.style.display = 'block';
+    if (!uiState.statusBar) return;
+    uiState.statusBar.textContent = 'Press backspace again to confirm';
+    uiState.statusBar.classList.add('confirm')
+    uiState.statusBar.style.display = 'block';
 
     // Bounce animation on the currently selected item
     const activeEl = uiState.listEl?.querySelector('.prd-stv-cmd-item.prd-stv-active');
