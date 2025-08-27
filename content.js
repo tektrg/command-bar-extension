@@ -5,10 +5,12 @@
 
 // Constants
 const CONSTANTS = {
-  MATERIAL_ICONS_URL: 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&icon_names=bookmark,history,public',
   CONFIRM_TIMEOUT: 2000,
   MAX_SUBTITLE_LENGTH: 60,
-  FALLBACK_ICON: chrome.runtime.getURL('link_18dp_E3E3E3.svg')
+  FALLBACK_ICON: chrome.runtime.getURL('link_18dp_E3E3E3.svg'),
+  BOOKMARK_ICON: chrome.runtime.getURL('bookmark_18dp_E3E3E3.svg'),
+  HISTORY_ICON: chrome.runtime.getURL('history_18dp_E3E3E3.svg'),
+  DEFAULT_STATUS_MSG: '↑ / ↓ navigate • ⌫ close/delete • c copy link'
 };
 
 // Message service to avoid DRY violations
@@ -75,14 +77,6 @@ function createOverlay() {
     lastConfirmIdx = uiState.lastConfirmIdx;
     confirmTimer = uiState.confirmTimer;
     idleTimer = uiState.idleTimer;
-    // load material icons once
-    if (!document.getElementById('prd-stv-cmd-bar-icons')) {
-      const link = document.createElement('link');
-      link.id = 'prd-stv-cmd-bar-icons';
-      link.rel = 'stylesheet';
-      link.href = CONSTANTS.MATERIAL_ICONS_URL;
-      document.head.appendChild(link);
-    }
     uiState.overlay = document.createElement('div');
     uiState.overlay.id = 'prd-stv-cmd-bar-overlay';
 
@@ -98,8 +92,9 @@ function createOverlay() {
     uiState.listEl.id = 'prd-stv-cmd-bar-list';
 
     uiState.confirmEl = document.createElement('div');
-    uiState.confirmEl.id = 'prd-stv-cmd-confirm';
-    uiState.confirmEl.style.display = 'none';
+    uiState.confirmEl.id = 'prd-stv-status-bar';
+    uiState.confirmEl.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
+    uiState.confirmEl.style.display = 'block';
     
     // Update legacy references
     overlay = uiState.overlay;
@@ -244,6 +239,16 @@ function onGlobalKeyDown(e) {
       return true;
     },
     
+    copy: (e) => {
+      if (e.key !== 'c' || e.metaKey || e.ctrlKey || e.altKey) return false;
+      const item = items[selectedIdx];
+      if (!item) return false;
+      e.preventDefault();
+      copyLinkToClipboard(item);
+      destroyOverlay();
+      return true;
+    },
+
     activation: (e) => {
       if (e.key !== 'Enter') return false;
       
@@ -290,6 +295,7 @@ function onGlobalKeyDown(e) {
     // Try each handler in order
     if (keyHandlers.navigation(e)) return;
     if (keyHandlers.metaNavigation(e)) return;
+    if (keyHandlers.copy(e)) return;
     if (keyHandlers.deletion(e)) return;
     if (keyHandlers.activation(e)) return;
   }
@@ -337,8 +343,9 @@ function hideDeleteConfirm() {
       confirmTimer = null;
     }
     if (uiState.confirmEl) {
-      uiState.confirmEl.style.display = 'none';
-      uiState.confirmEl.textContent = '';
+      uiState.confirmEl.style.display = 'block';
+      uiState.confirmEl.classList.remove('confirm')
+      uiState.confirmEl.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
     }
   }
 
@@ -358,6 +365,7 @@ function removeProgressBars() {
 function showDeleteConfirm() {
     if (!uiState.confirmEl) return;
     uiState.confirmEl.textContent = 'Press backspace again to confirm';
+    uiState.confirmEl.classList.add('confirm')
     uiState.confirmEl.style.display = 'block';
 
     // Bounce animation on the currently selected item
@@ -393,15 +401,13 @@ function showDeleteConfirm() {
       </div>
     `;
     
-    // Add error handling for favicon images
-    const favicon = div.querySelector('.prd-stv-favicon');
-    if (favicon) {
-      favicon.addEventListener('error', () => {
-        // Stop further reload attempts and display fallback once
-        favicon.removeAttribute('data-src');
-        favicon.src = CONSTANTS.FALLBACK_ICON;
-      }, { once: true });
-    }
+    // // Add error handling for favicon images
+    // const favicon = div.querySelector('.prd-stv-favicon');
+    // if (favicon) {
+    //   favicon.addEventListener('error', () => {
+    //     favicon.src = CONSTANTS.FALLBACK_ICON;
+    //   }, { once: true });
+    // }
     
     // Add click handler
     div.addEventListener('click', () => {
@@ -429,45 +435,28 @@ function showDeleteConfirm() {
 
     // Ensure the selected item is visible within the scroll container
     scrollToActiveItem();
-
-    // Lazily load any favicons that have data-src
-    lazyLoadFavicons();
   }
 
 function getIconHtml(it) {
+    // For bookmarks and history, use Google's favicon service
+    if ((it.type === 'bookmark' || it.type === 'history') && it.url) {
+      const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(it.url).hostname)}&sz=32`;
+      return `<img class="prd-stv-favicon" src="${faviconUrl}" onerror="this.src='${CONSTANTS.FALLBACK_ICON}'" />`;
+    }
+    
+    // For tabs, use the favicon if available
     const actual = it.icon || '';
     if (actual) {
-      // Render placeholder immediately; real favicon swapped lazily
-return `<img class="prd-stv-favicon" src="${CONSTANTS.FALLBACK_ICON}" data-src="${actual}" />`;
+      return `<img class="prd-stv-favicon" src="${actual}" />`;
     }
-    // No favicon available → just placeholder
-return `<img class="prd-stv-favicon" src="${CONSTANTS.FALLBACK_ICON}" />`;
+    // No favicon available → fallback icon
+    return `<img class="prd-stv-favicon" src="${CONSTANTS.FALLBACK_ICON}" />`;
   }
 
-  // Swap in real favicons after initial render without blocking first paint
-  function lazyLoadFavicons() {
-    const imgs = listEl?.querySelectorAll('img.prd-stv-favicon[data-src]');
-    if (!imgs || imgs.length === 0) return;
-
-    const load = () => {
-      imgs.forEach(img => {
-        if (img.dataset.src) {
-          img.src = img.dataset.src;
-          img.removeAttribute('data-src');
-        }
-      });
-    };
-
-    if ('requestIdleCallback' in window) {
-      requestIdleCallback(load, { timeout: 1000 });
-    } else {
-      setTimeout(load, 0);
-    }
-  }
 
   function typeGlyph(it) {
-    if (it.type === 'bookmark') return '<span class="material-symbols-outlined">bookmark</span>';
-    if (it.type === 'history') return '<span class="material-symbols-outlined">history</span>';
+    if (it.type === 'bookmark') return `<img src="${CONSTANTS.BOOKMARK_ICON}" class="prd-stv-type-icon" />`;
+    if (it.type === 'history') return `<img src="${CONSTANTS.HISTORY_ICON}" class="prd-stv-type-icon" />`;
     return '';
   }
 
@@ -482,6 +471,34 @@ return `<img class="prd-stv-favicon" src="${CONSTANTS.FALLBACK_ICON}" />`;
       return glyph ? `${glyph} ${escapeHtml(it.folder)}` : escapeHtml(it.folder);
     }
     return highlightMatches(truncateMiddle(it.url), input?.value.trim());
+  }
+
+function showToast(message, duration = 2000) {
+    const existing = document.getElementById('prd-stv-toast');
+    existing?.remove();
+    const div = document.createElement('div');
+    div.id = 'prd-stv-toast';
+    div.textContent = message;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), duration);
+  }
+
+  async function copyLinkToClipboard(item) {
+    try {
+      await navigator.clipboard.writeText(item.url || '');
+      showToast('Link copied!');
+    } catch (e) {
+      // Fallback: create temp textarea
+      const ta = document.createElement('textarea');
+      ta.value = item.url || '';
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (err) {}
+      ta.remove();
+      showToast('Link copied!');
+    }
   }
 
   function timeAgo(ms) {
