@@ -7,7 +7,8 @@
     "tabs",
     "bookmarks",
     "history",
-    "scripting"
+    "scripting",
+    "favicon"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -36,11 +37,11 @@
     "default_title": "Command Bar"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; font-src 'self' https://fonts.gstatic.com"
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' chrome-extension: data:"
   },
   "web_accessible_resources": [
     {
-      "resources": ["link_18dp_E3E3E3.svg"],
+      "resources": ["link_18dp_E3E3E3.svg", "bookmark_18dp_E3E3E3.svg", "history_18dp_E3E3E3.svg"],
       "matches": ["<all_urls>"]
     }
   ]
