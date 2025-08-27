@@ -32,6 +32,29 @@ chrome.action.onClicked.addListener(async (tab) => {
   await toggleCommandBar();
 });
 
+// Listen for tab events to update tab count
+chrome.tabs.onCreated.addListener(() => {
+  // Send message to all tabs to update their tab count
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach(t => {
+      if (t.id) {
+        chrome.tabs.sendMessage(t.id, { type: "TAB_COUNT_CHANGED" }).catch(() => {});
+      }
+    });
+  });
+});
+
+chrome.tabs.onRemoved.addListener(() => {
+  // Send message to all tabs to update their tab count
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach(t => {
+      if (t.id) {
+        chrome.tabs.sendMessage(t.id, { type: "TAB_COUNT_CHANGED" }).catch(() => {});
+      }
+    });
+  });
+});
+
 // handle search queries from content script
 async function getBookmarkPath(node) {
   const parts = [];
@@ -102,5 +125,10 @@ chrome.tabs.query({}, (tabs) => {
     } else {
       chrome.tabs.create({ url: item.url });
     }
+  } else if (msg.type === "GET_TAB_COUNT") {
+    chrome.tabs.query({}, (tabs) => {
+      sendResponse({ count: tabs.length });
+    });
+    return true; // async
   }
 });

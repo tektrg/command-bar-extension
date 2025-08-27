@@ -93,8 +93,30 @@ function createOverlay() {
 
     uiState.statusBar = document.createElement('div');
     uiState.statusBar.id = 'prd-stv-status-bar';
-    uiState.statusBar.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
-    uiState.statusBar.style.display = 'block';
+    
+    // Create tab counter container
+    const tabCounterContainer = document.createElement('div');
+    tabCounterContainer.style.display = 'flex';
+    tabCounterContainer.style.alignItems = 'center';
+    tabCounterContainer.style.marginRight = '8px';
+    
+    // Create tab counter element
+    const tabCounter = document.createElement('span');
+    tabCounter.id = 'prd-stv-tab-counter';
+    tabCounter.textContent = '0';
+    
+    tabCounterContainer.appendChild(tabCounter);
+    tabCounterContainer.appendChild(document.createTextNode(' tabs'));
+    
+    // Create status message element
+    const statusMessage = document.createElement('span');
+    statusMessage.id = 'prd-stv-status-message';
+    statusMessage.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
+    
+    uiState.statusBar.appendChild(tabCounterContainer);
+    uiState.statusBar.appendChild(statusMessage);
+    uiState.statusBar.style.display = 'flex';
+    uiState.statusBar.style.alignItems = 'center';
     
     // Update legacy references
     overlay = uiState.overlay;
@@ -132,6 +154,9 @@ function createOverlay() {
       selectedIdx = uiState.selectedIdx;
       renderList();
     });
+    
+    // Get initial tab count
+    updateTabCount();
   }
 
   function destroyOverlay() {
@@ -301,6 +326,8 @@ function onGlobalKeyDown(e) {
     items.splice(selectedIdx, 1);
     if (selectedIdx >= items.length) selectedIdx = items.length - 1;
     renderList();
+    // Update tab count after removing an item
+    updateTabCount();
   }
 
   // Simplified and centralized key handling
@@ -364,10 +391,10 @@ function hideDeleteConfirm() {
       uiState.confirmTimer = null;
       confirmTimer = null;
     }
-    if (uiState.statusBar) {
-      uiState.statusBar.style.display = 'block';
-      uiState.statusBar.classList.remove('confirm')
-      uiState.statusBar.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
+    const statusMessage = document.getElementById('prd-stv-status-message');
+    if (statusMessage) {
+      statusMessage.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
+      statusMessage.classList.remove('confirm');
     }
   }
 
@@ -385,10 +412,11 @@ function removeProgressBars() {
   }
 
 function showDeleteConfirm() {
-    if (!uiState.statusBar) return;
-    uiState.statusBar.textContent = 'Press backspace again to confirm';
-    uiState.statusBar.classList.add('confirm')
-    uiState.statusBar.style.display = 'block';
+    const statusMessage = document.getElementById('prd-stv-status-message');
+    if (!statusMessage) return;
+    
+    statusMessage.textContent = 'Press backspace again to confirm';
+    statusMessage.classList.add('confirm');
 
     // Bounce animation on the currently selected item
     const activeEl = uiState.listEl?.querySelector('.prd-stv-cmd-item.prd-stv-active');
@@ -568,9 +596,37 @@ function showToast(message, duration = 2000) {
     return str.slice(0, part) + '...' + str.slice(str.length - part);
   }
 
+  // Update the tab counter in the status bar
+  function updateTabCount() {
+    // Request tab count from background script
+    chrome.runtime.sendMessage({ type: "GET_TAB_COUNT" }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error getting tab count:', chrome.runtime.lastError);
+        return;
+      }
+      
+      const tabCounter = document.getElementById('prd-stv-tab-counter');
+      if (tabCounter && response && response.count !== undefined) {
+        const oldCount = parseInt(tabCounter.textContent) || 0;
+        const newCount = response.count;
+        
+        // Update the counter with animation if the count changed
+        if (oldCount !== newCount) {
+          tabCounter.textContent = newCount;
+          tabCounter.classList.remove('prd-stv-tab-count-update');
+          // Trigger reflow to restart animation
+          void tabCounter.offsetWidth;
+          tabCounter.classList.add('prd-stv-tab-count-update');
+        }
+      }
+    });
+  }
+
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'TOGGLE') {
       toggleOverlay();
+    } else if (msg.type === 'TAB_COUNT_CHANGED') {
+      updateTabCount();
     }
   });
 })();
