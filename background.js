@@ -44,30 +44,22 @@ async function getBookmarkPath(node) {
   return parts.join(' / ');
 }
 
-function getFavicon(pageUrl) {
-  try {
-    const { hostname } = new URL(pageUrl);
-    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
-  } catch {
-    return '';
-  }
-}
 
 async function search(query) {
   const results = [];
   // open tabs first
   const tabs = await chrome.tabs.query({});
   const tabMatches = tabs.filter(t => (t.title && t.title.toLowerCase().includes(query)) || (t.url && t.url.toLowerCase().includes(query)));
-tabMatches.forEach(t => results.push({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : getFavicon(t.url), type: 'tab' }));
+tabMatches.forEach(t => results.push({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '', type: 'tab' }));
 // bookmarks
   const bookmarkTree = await chrome.bookmarks.search({ query });
   for (const b of bookmarkTree) {
     const folderPath = await getBookmarkPath(b);
-results.push({ id: b.id, title: b.title, url: b.url, source: "bookmark", icon: getFavicon(b.url), folder: folderPath, type: 'bookmark' });
+results.push({ id: b.id, title: b.title, url: b.url, source: "bookmark", icon: '', folder: folderPath, type: 'bookmark' });
   }
 // history
   const historyItems = await chrome.history.search({ text: query, maxResults: 20 });
-historyItems.forEach(h => results.push({ id: h.id, title: h.title, url: h.url, source: "history", icon: getFavicon(h.url), lastVisitTime: h.lastVisitTime, type: 'history' }));
+historyItems.forEach(h => results.push({ id: h.id, title: h.title, url: h.url, source: "history", icon: '', lastVisitTime: h.lastVisitTime, type: 'history' }));
   return results;
 }
 
@@ -87,7 +79,7 @@ chrome.tabs.query({}, (tabs) => {
       }
       // Sort by most recently accessed
       tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-      const recent = tabs.slice(0, 5).map(t => ({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : getFavicon(t.url), type: 'tab' }));
+      const recent = tabs.slice(0, 5).map(t => ({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '', type: 'tab' }));
       sendResponse(recent);
     });
     return true;
