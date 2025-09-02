@@ -7,8 +7,7 @@
     "tabs",
     "bookmarks",
     "history",
-    "scripting",
-    "favicon"
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -16,14 +15,6 @@
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["style.css"],
-      "run_at": "document_idle"
-    }
-  ],
   "commands": {
     "toggle-command-bar": {
       "suggested_key": {
@@ -47,4 +38,3 @@
   ]
 
 }
-
