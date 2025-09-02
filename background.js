@@ -1,16 +1,28 @@
 // background.js
+// Track tabs where we've already inserted CSS to avoid duplicates
+const cssInjectedTabs = new Set();
+
 async function toggleCommandBar() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
-  
+
   // Skip restricted URLs
   if (tab.url?.startsWith('chrome://') || tab.url?.startsWith('edge://') || tab.url?.startsWith('chrome-extension://')) {
     console.warn('Cannot inject into restricted URL:', tab.url);
     return;
   }
-  
+
   try {
-    // inject content script if not yet injected
+    // Insert CSS once per tab lifecycle
+    if (tab.id && !cssInjectedTabs.has(tab.id)) {
+      await chrome.scripting.insertCSS({
+        target: { tabId: tab.id },
+        files: ["style.css"],
+      });
+      cssInjectedTabs.add(tab.id);
+    }
+
+    // Inject content script (idempotent due to in-script guard)
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ["content.js"]
@@ -18,7 +30,7 @@ async function toggleCommandBar() {
     // toggle overlay
     chrome.tabs.sendMessage(tab.id, { type: "TOGGLE" });
   } catch (error) {
-    console.error('Failed to inject content script:', error);
+    console.error('Failed to inject content script or CSS:', error);
   }
 }
 
@@ -55,6 +67,11 @@ chrome.tabs.onRemoved.addListener(() => {
   });
 });
 
+// Clear CSS tracking when tabs close
+chrome.tabs.onRemoved.addListener((tabId) => {
+  cssInjectedTabs.delete(tabId);
+});
+
 // handle search queries from content script
 async function getBookmarkPath(node) {
   const parts = [];
@@ -69,21 +86,39 @@ async function getBookmarkPath(node) {
 
 
 async function search(query) {
-  const results = [];
-  // open tabs first
-  const tabs = await chrome.tabs.query({});
+  const [tabs, bookmarkTree, historyItems] = await Promise.all([
+    chrome.tabs.query({}),
+    chrome.bookmarks.search({ query }),
+    chrome.history.search({ text: query, maxResults: 20 })
+  ]);
+
   const tabMatches = tabs.filter(t => (t.title && t.title.toLowerCase().includes(query)) || (t.url && t.url.toLowerCase().includes(query)));
-tabMatches.forEach(t => results.push({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '', type: 'tab' }));
-// bookmarks
-  const bookmarkTree = await chrome.bookmarks.search({ query });
-  for (const b of bookmarkTree) {
+  const tabResults = tabMatches.map(t => ({
+    id: t.id,
+    title: t.title,
+    url: t.url,
+    source: "tab",
+    icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '',
+    type: 'tab'
+  }));
+
+  // Resolve bookmark folder paths concurrently
+  const bookmarkResults = await Promise.all(bookmarkTree.map(async (b) => {
     const folderPath = await getBookmarkPath(b);
-results.push({ id: b.id, title: b.title, url: b.url, source: "bookmark", icon: '', folder: folderPath, type: 'bookmark' });
-  }
-// history
-  const historyItems = await chrome.history.search({ text: query, maxResults: 20 });
-historyItems.forEach(h => results.push({ id: h.id, title: h.title, url: h.url, source: "history", icon: '', lastVisitTime: h.lastVisitTime, type: 'history' }));
-  return results;
+    return { id: b.id, title: b.title, url: b.url, source: "bookmark", icon: '', folder: folderPath, type: 'bookmark' };
+  }));
+
+  const historyResults = historyItems.map(h => ({
+    id: h.id,
+    title: h.title,
+    url: h.url,
+    source: "history",
+    icon: '',
+    lastVisitTime: h.lastVisitTime,
+    type: 'history'
+  }));
+
+  return [...tabResults, ...bookmarkResults, ...historyResults];
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -95,14 +130,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true; // async
   } else if (msg.type === "RECENT") {
-chrome.tabs.query({}, (tabs) => {
+    chrome.tabs.query({}, (allTabs) => {
       const activeId = sender.tab?.id;
-      if (activeId) {
-        tabs = tabs.filter(t => t.id !== activeId);
-      }
+      const filtered = activeId ? allTabs.filter(t => t.id !== activeId) : allTabs;
       // Sort by most recently accessed
-      tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-      const recent = tabs.slice(0, 5).map(t => ({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '', type: 'tab' }));
+      filtered.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+      const recent = filtered.slice(0, 5).map(t => ({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '', type: 'tab' }));
       sendResponse(recent);
     });
     return true;
