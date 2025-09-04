@@ -7,7 +7,8 @@
     "tabs",
     "bookmarks",
     "history",
-    "scripting"
+    "scripting",
+    "sidePanel"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -25,10 +26,13 @@
     }
   },
   "action": {
-    "default_title": "Command Bar"
+    "default_title": "Command Bar - Click to toggle overlay, or click extension icon with side panel open"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' chrome-extension: data:"
+    "extension_pages": "script-src 'self'; object-src 'self'; img-src 'self' chrome-extension: data: https: chrome:"
   },
   "web_accessible_resources": [
     {

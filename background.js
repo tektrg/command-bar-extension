@@ -40,7 +40,11 @@ chrome.commands.onCommand.addListener(async (command) => {
   }
 });
 
+// Enable opening side panel on action click with modifier key
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+
 chrome.action.onClicked.addListener(async (tab) => {
+  // Default behavior: toggle command bar overlay
   await toggleCommandBar();
 });
 
