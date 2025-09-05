@@ -97,13 +97,24 @@ async function search(query) {
   ]);
 
   const tabMatches = tabs.filter(t => (t.title && t.title.toLowerCase().includes(query)) || (t.url && t.url.toLowerCase().includes(query)));
+  
+  // Sort tabs by windowId first, then by index to maintain proper order
+  tabMatches.sort((a, b) => {
+    if (a.windowId !== b.windowId) {
+      return a.windowId - b.windowId;
+    }
+    return a.index - b.index;
+  });
+  
   const tabResults = tabMatches.map(t => ({
     id: t.id,
     title: t.title,
     url: t.url,
     source: "tab",
     icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '',
-    type: 'tab'
+    type: 'tab',
+    windowId: t.windowId,
+    index: t.index
   }));
 
   // Resolve bookmark folder paths concurrently
@@ -137,9 +148,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.tabs.query({}, (allTabs) => {
       const activeId = sender.tab?.id;
       const filtered = activeId ? allTabs.filter(t => t.id !== activeId) : allTabs;
-      // Sort by most recently accessed
-      filtered.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-      const recent = filtered.slice(0, 5).map(t => ({ id: t.id, title: t.title, url: t.url, source: "tab", icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '', type: 'tab' }));
+      
+      // Sort tabs by windowId first, then by index to maintain proper order
+      filtered.sort((a, b) => {
+        if (a.windowId !== b.windowId) {
+          return a.windowId - b.windowId;
+        }
+        return a.index - b.index;
+      });
+      
+      const recent = filtered.map(t => ({ 
+        id: t.id, 
+        title: t.title, 
+        url: t.url, 
+        source: "tab", 
+        icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '', 
+        type: 'tab',
+        windowId: t.windowId,
+        index: t.index
+      }));
       sendResponse(recent);
     });
     return true;
