@@ -308,9 +308,21 @@
       el.tabs.appendChild(empty);
       return;
     }
+    
+    let currentWindowId = null;
+    
     list.forEach(t => {
+      // Add window separator if we're switching to a new window
+      if (t.windowId !== currentWindowId) {
+        const separator = document.createElement('div');
+        separator.className = 'prd-stv-window-separator';
+        separator.innerHTML = `<span>Window ${t.windowId}</span>`;
+        el.tabs.appendChild(separator);
+        currentWindowId = t.windowId;
+      }
+      
       const div = document.createElement('div');
-      div.className = 'prd-stv-cmd-item';
+      div.className = t.active ? 'prd-stv-cmd-item active-tab' : 'prd-stv-cmd-item';
       div.dataset.id = String(t.id);
       div.setAttribute('draggable', 'true');
       const fav = faviconFor({ type: 'tab', icon: t.favIconUrl, url: t.url });
@@ -318,6 +330,7 @@
         <div style="display:flex;flex:1;align-items:center;min-width:0;">
           <img class="prd-stv-favicon" src="${fav}" onerror="this.src='${FALLBACK_ICON}'" />
           <span class="prd-stv-title">${highlightMatches(t.title || t.url || '', state.query)}</span>
+          ${t.active ? '<span class="active-indicator">●</span>' : ''}
         </div>
         <button class="prd-stv-close-btn" title="Close tab">×</button>
       `;
@@ -488,7 +501,15 @@
   async function reloadTabs() {
     const all = await chrome.tabs.query({});
     const filtered = all.filter(t => t.url && !t.url.startsWith('chrome://'));
-    filtered.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+    
+    // Sort tabs by windowId first, then by index to maintain proper order
+    filtered.sort((a, b) => {
+      if (a.windowId !== b.windowId) {
+        return a.windowId - b.windowId;
+      }
+      return a.index - b.index;
+    });
+    
     state.tabs = filtered;
     applyTabFilter();
   }
