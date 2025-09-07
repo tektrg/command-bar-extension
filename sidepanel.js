@@ -7,9 +7,7 @@
   // DOM refs
   const el = {
     input: null,
-    tree: null,
-    tabs: null,
-    history: null,
+    combined: null,
     root: null,
   };
 
@@ -21,7 +19,6 @@
     expanded: new Set(),
     tabs: [],
     filteredTabs: [],
-    history: [],
   };
 
   // Utils
@@ -181,22 +178,57 @@
 
   // Rendering
   function render() {
-    renderBookmarks();
-    renderTabs();
-    renderHistory();
+    renderCombined();
   }
 
-  function renderBookmarks() {
-    el.tree.innerHTML = '';
+  function renderCombined() {
+    el.combined.innerHTML = '';
+    
+    // Render bookmarks first
     const roots = state.filteredTree.length ? state.filteredTree : state.bookmarksRoots;
-    if (!roots || !roots.length) {
+    if (roots && roots.length) {
+      // Add bookmarks section header if there are items
+      const bookmarkHeader = document.createElement('div');
+      bookmarkHeader.className = 'prd-stv-window-separator';
+      bookmarkHeader.innerHTML = '<span>Bookmarks</span>';
+      el.combined.appendChild(bookmarkHeader);
+      
+      roots.forEach(root => el.combined.appendChild(renderNode(root, 0)));
+    }
+    
+    // Render tabs
+    const tabList = state.filteredTabs.length || state.query ? state.filteredTabs : state.tabs;
+    if (tabList && tabList.length) {
+      // Add tabs section header if there are items
+      const tabHeader = document.createElement('div');
+      tabHeader.className = 'prd-stv-window-separator';
+      tabHeader.innerHTML = '<span>Open Tabs</span>';
+      el.combined.appendChild(tabHeader);
+      
+      let currentWindowId = null;
+      tabList.forEach(t => {
+        // Add window separator if we're switching to a new window
+        if (t.windowId !== currentWindowId) {
+          const separator = document.createElement('div');
+          separator.className = 'prd-stv-window-separator';
+          separator.innerHTML = `<span>Window ${t.windowId}</span>`;
+          separator.style.fontSize = '10px';
+          separator.style.color = '#777';
+          el.combined.appendChild(separator);
+          currentWindowId = t.windowId;
+        }
+        
+        el.combined.appendChild(renderTabItem(t));
+      });
+    }
+    
+    // Show empty state if no items
+    if ((!roots || !roots.length) && (!tabList || !tabList.length)) {
       const empty = document.createElement('div');
       empty.className = 'prd-stv-empty';
-      empty.textContent = 'No bookmarks';
-      el.tree.appendChild(empty);
-      return;
+      empty.textContent = 'No items found';
+      el.combined.appendChild(empty);
     }
-    roots.forEach(root => el.tree.appendChild(renderNode(root, 0)));
   }
 
   function renderNode(node, depth) {
@@ -298,101 +330,41 @@
     return div;
   }
 
-  function renderTabs() {
-    el.tabs.innerHTML = '';
-    const list = state.filteredTabs.length || state.query ? state.filteredTabs : state.tabs;
-    if (!list || !list.length) {
-      const empty = document.createElement('div');
-      empty.className = 'prd-stv-empty';
-      empty.textContent = 'No open tabs';
-      el.tabs.appendChild(empty);
-      return;
-    }
-    
-    let currentWindowId = null;
-    
-    list.forEach(t => {
-      // Add window separator if we're switching to a new window
-      if (t.windowId !== currentWindowId) {
-        const separator = document.createElement('div');
-        separator.className = 'prd-stv-window-separator';
-        separator.innerHTML = `<span>Window ${t.windowId}</span>`;
-        el.tabs.appendChild(separator);
-        currentWindowId = t.windowId;
+  function renderTabItem(t) {
+    const div = document.createElement('div');
+    div.className = t.active ? 'prd-stv-cmd-item active-tab' : 'prd-stv-cmd-item';
+    div.dataset.id = String(t.id);
+    div.setAttribute('draggable', 'true');
+    const fav = faviconFor({ type: 'tab', icon: t.favIconUrl, url: t.url });
+    div.innerHTML = `
+      <div style="display:flex;flex:1;align-items:center;min-width:0;">
+        <img class="prd-stv-favicon" src="${fav}" onerror="this.src='${FALLBACK_ICON}'" />
+        <span class="prd-stv-title">${highlightMatches(t.title || t.url || '', state.query)}</span>
+        ${t.active ? '<span class="active-indicator">●</span>' : ''}
+      </div>
+      <button class="prd-stv-close-btn" title="Close tab">×</button>
+    `;
+    div.addEventListener('click', (e) => {
+      if (e.target.classList.contains('prd-stv-close-btn')) {
+        e.stopPropagation();
+        closeTab(t.id);
+      } else {
+        activateTab(t);
       }
-      
-      const div = document.createElement('div');
-      div.className = t.active ? 'prd-stv-cmd-item active-tab' : 'prd-stv-cmd-item';
-      div.dataset.id = String(t.id);
-      div.setAttribute('draggable', 'true');
-      const fav = faviconFor({ type: 'tab', icon: t.favIconUrl, url: t.url });
-      div.innerHTML = `
-        <div style="display:flex;flex:1;align-items:center;min-width:0;">
-          <img class="prd-stv-favicon" src="${fav}" onerror="this.src='${FALLBACK_ICON}'" />
-          <span class="prd-stv-title">${highlightMatches(t.title || t.url || '', state.query)}</span>
-          ${t.active ? '<span class="active-indicator">●</span>' : ''}
-        </div>
-        <button class="prd-stv-close-btn" title="Close tab">×</button>
-      `;
-      div.addEventListener('click', (e) => {
-        if (e.target.classList.contains('prd-stv-close-btn')) {
-          e.stopPropagation();
-          closeTab(t.id);
-        } else {
-          activateTab(t);
-        }
-      });
-      div.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'tab', id: t.id, title: t.title, url: t.url }));
-        e.dataTransfer.effectAllowed = 'copy';
-      });
-      el.tabs.appendChild(div);
     });
+    div.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'tab', id: t.id, title: t.title, url: t.url }));
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    return div;
   }
 
-  function renderHistory() {
-    el.history.innerHTML = '';
-    if (!state.history.length) {
-      const empty = document.createElement('div');
-      empty.className = 'prd-stv-empty';
-      empty.textContent = 'No history';
-      el.history.appendChild(empty);
-      return;
-    }
-    state.history.forEach(h => {
-      const div = document.createElement('div');
-      div.className = 'prd-stv-cmd-item';
-      div.dataset.id = String(h.id || '');
-      div.setAttribute('draggable', 'true');
-      const fav = faviconFor({ type: 'history', url: h.url });
-      div.innerHTML = `
-        <div style="display:flex;flex:1;align-items:center;min-width:0;">
-          <img class="prd-stv-favicon" src="${fav}" onerror="this.src='${FALLBACK_ICON}'" />
-          <span class="prd-stv-title">${highlightMatches(h.title || h.url || '', state.query)}</span>
-        </div>
-        <button class="prd-stv-close-btn" title="Delete from history">×</button>
-      `;
-      div.addEventListener('click', (e) => {
-        if (e.target.classList.contains('prd-stv-close-btn')) {
-          e.stopPropagation();
-          deleteHistoryItem(h.url);
-        } else {
-          openUrl(h.url || '', e);
-        }
-      });
-      div.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'history', url: h.url, title: h.title }));
-        e.dataTransfer.effectAllowed = 'copy';
-      });
-      el.history.appendChild(div);
-    });
-  }
 
   // Event handlers
   function toggleFolder(id) {
     if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
     persistExpanded();
-    renderBookmarks();
+    render();
   }
 
   function ensureExpanded(id) {
@@ -412,10 +384,6 @@
       if (!payload.url) return;
       await createIfNotDuplicate(folderId, payload.title || payload.url, payload.url);
       showToast('Bookmarked tab');
-    } else if (payload.type === 'history') {
-      if (!payload.url) return;
-      await createIfNotDuplicate(folderId, payload.title || payload.url, payload.url);
-      showToast('Bookmarked page');
     }
   }
 
@@ -450,16 +418,6 @@
     }
   }
 
-  async function deleteHistoryItem(url) {
-    try {
-      await chrome.history.deleteUrl({ url });
-      await reloadHistory();
-      render();
-      showToast('Removed from history');
-    } catch {
-      showToast('Failed to remove from history');
-    }
-  }
 
   async function openUrl(url, mouseEvent) {
     if (!url) return;
@@ -523,18 +481,11 @@
     });
   }
 
-  async function reloadHistory() {
-    const text = state.query || '';
-    const items = await chrome.history.search({ text, maxResults: 20 });
-    items.sort((a, b) => (b.lastVisitTime || 0) - (a.lastVisitTime || 0));
-    state.history = items;
-  }
 
   const onSearch = debounce(async () => {
     state.query = (el.input.value || '').trim();
     applyBookmarkFilter();
     applyTabFilter();
-    await reloadHistory();
     render();
   }, 200);
 
@@ -542,15 +493,13 @@
   document.addEventListener('DOMContentLoaded', async () => {
     el.root = document.getElementById('prd-stv-sidepanel-root');
     el.input = document.getElementById('prd-stv-sidepanel-input');
-    el.tree = document.getElementById('bookmarks-tree');
-    el.tabs = document.getElementById('tabs-list');
-    el.history = document.getElementById('history-list');
+    el.combined = document.getElementById('combined-list');
     
     // Set focus to input
     el.input.focus();
     
     await loadExpanded();
-    await Promise.all([reloadBookmarks(), reloadTabs(), reloadHistory()]);
+    await Promise.all([reloadBookmarks(), reloadTabs()]);
     render();
 
     el.input.addEventListener('input', onSearch);
@@ -560,31 +509,31 @@
       chrome.bookmarks.onCreated.addListener((id, bm) => {
         reloadBookmarks().then(() => { 
           if (bm && bm.parentId) ensureExpanded(bm.parentId); 
-          renderBookmarks(); 
+          render(); 
         });
       });
       chrome.bookmarks.onMoved.addListener((id, info) => {
         reloadBookmarks().then(() => { 
           if (info && info.parentId) ensureExpanded(info.parentId); 
-          renderBookmarks(); 
+          render(); 
         });
       });
       chrome.bookmarks.onChanged.addListener(() => {
-        reloadBookmarks().then(() => renderBookmarks());
+        reloadBookmarks().then(() => render());
       });
       chrome.bookmarks.onRemoved.addListener(() => {
-        reloadBookmarks().then(() => renderBookmarks());
+        reloadBookmarks().then(() => render());
       });
       
       // Listen for tab changes to update the tabs list
       chrome.tabs.onCreated.addListener(() => {
-        reloadTabs().then(() => renderTabs());
+        reloadTabs().then(() => render());
       });
       chrome.tabs.onRemoved.addListener(() => {
-        reloadTabs().then(() => renderTabs());
+        reloadTabs().then(() => render());
       });
       chrome.tabs.onUpdated.addListener(() => {
-        reloadTabs().then(() => renderTabs());
+        reloadTabs().then(() => render());
       });
     } catch {}
   });
