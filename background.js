@@ -114,13 +114,14 @@ async function search(query) {
     icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '',
     type: 'tab',
     windowId: t.windowId,
-    index: t.index
+    index: t.index,
+    lastAccessed: t.lastAccessed || 0
   }));
 
   // Resolve bookmark folder paths concurrently
   const bookmarkResults = await Promise.all(bookmarkTree.map(async (b) => {
     const folderPath = await getBookmarkPath(b);
-    return { id: b.id, title: b.title, url: b.url, source: "bookmark", icon: '', folder: folderPath, type: 'bookmark' };
+    return { id: b.id, title: b.title, url: b.url, source: "bookmark", icon: '', folder: folderPath, type: 'bookmark', dateAdded: b.dateAdded || 0 };
   }));
 
   const historyResults = historyItems.map(h => ({
@@ -149,13 +150,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const activeId = sender.tab?.id;
       const filtered = activeId ? allTabs.filter(t => t.id !== activeId) : allTabs;
       
-      // Sort tabs by windowId first, then by index to maintain proper order
-      filtered.sort((a, b) => {
-        if (a.windowId !== b.windowId) {
-          return a.windowId - b.windowId;
-        }
-        return a.index - b.index;
-      });
+      // Don't pre-sort here - let content script sort by lastAccessed
       
       const recent = filtered.map(t => ({ 
         id: t.id, 
@@ -165,7 +160,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '', 
         type: 'tab',
         windowId: t.windowId,
-        index: t.index
+        index: t.index,
+        lastAccessed: t.lastAccessed || 0
       }));
       sendResponse(recent);
     });
