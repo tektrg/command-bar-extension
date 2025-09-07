@@ -1,6 +1,21 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code and order AI code agents when working with code in this repository.
+
+## How to proceed:
+ You must follow this step to acquire needed contexts for the task. This document is a map to the other detailed documents via markdown link.
+- Step 1: Skim this document to decide which linked documents (in markdown link) are necessary. Prioritize the minimal set needed to fulfill the task.
+- Step 2: For each needed link, read and synthesize the information across documents to produce the final deliverable accurately specified by the task.
+- Step 3: Flag any missing info, conflicts, or assumptions needed.
+REMEMBER: Start with this document and consult linked detailed documents only as needed for the task to understand and fulfill the instructions.
+
+## Operation Modes
+
+You have various specific operation modes:
+**Spin an agent** for each of below mode when it match the user's request, **or** if you cannot spin an agent, **read the doc and follow the specific instruction** for the mode:
+- [feature-planner](docs/commands/feature-planner.md): trigger when user ask for planing a task.
+- [search internet] Use gemini to search content on the internet, how to use: gemini -p "Search google for [query] and summarize  results". Note make sure set timeout long enough for the search, for complex query it could take few minutes
+## Build Commands
 
 ## Project Overview
 
