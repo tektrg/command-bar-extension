@@ -28,6 +28,48 @@
       .bm-folder-header[draggable="true"] { cursor: grab; }
       .bm-folder-header[draggable="true"]:active { cursor: grabbing; }
       .prd-stv-cmd-item[draggable="true"]:active { cursor: grabbing; }
+      /* Drop zone styling */
+      .drop-zone { 
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 4px; 
+        background: #b9a079; 
+        border-radius: 2px;
+        opacity: 0; 
+        transition: opacity 0.15s ease;
+        z-index: 1000;
+        pointer-events: all;
+        margin: 0;
+      }
+      .drop-zone.active { 
+        opacity: 1; 
+        box-shadow: 0 0 4px #b9a079;
+      }
+      .drop-zone::before {
+        content: '';
+        position: absolute;
+        left: -6px;
+        top: -1px;
+        width: 6px;
+        height: 6px;
+        background: #b9a079;
+        border-radius: 50%;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      .drop-zone.active::before { opacity: 1; }
+      /* Container positioning for drop zones */
+      .bm-children, #bookmarks-tree { position: relative; }
+      /* Enhanced drag feedback */
+      .dragging { opacity: 0.5; transform: rotate(2deg); }
+      .drag-preview { pointer-events: none; }
+      .bm-folder.dragging, .prd-stv-cmd-item.dragging { 
+        opacity: 0.6; 
+        background: #404040; 
+        border: 1px dashed #666; 
+      }
+      .drag-target { outline: 2px solid #b9a079 !important; }
       .prd-stv-empty { color: #7a7a7a; font-size: 13px; padding: 8px 0; }
       /* Item typography */
       .prd-stv-cmd-item { 

@@ -19,6 +19,11 @@
     expanded: new Set(),
     tabs: [],
     filteredTabs: [],
+    dragState: {
+      isDragging: false,
+      draggedItem: null,
+      draggedType: null,
+    },
   };
 
   // Utils
@@ -94,6 +99,98 @@
     div.textContent = message;
     document.body.appendChild(div);
     setTimeout(() => div.remove(), duration);
+  }
+
+  // Drop zone management
+  function createDropZone(parentId, index, targetElement, position) {
+    const zone = document.createElement('div');
+    zone.className = 'drop-zone';
+    zone.dataset.parentId = parentId;
+    zone.dataset.index = index;
+    
+    // Position the drop zone absolutely
+    let top;
+    if (position === 'before') {
+      top = targetElement.offsetTop - 2;
+    } else { // after
+      top = targetElement.offsetTop + targetElement.offsetHeight - 2;
+    }
+    
+    zone.style.top = top + 'px';
+    
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      zone.classList.add('active');
+    });
+    
+    zone.addEventListener('dragleave', () => {
+      zone.classList.remove('active');
+    });
+    
+    zone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      zone.classList.remove('active');
+      
+      const txt = e.dataTransfer.getData('text/plain');
+      if (!txt) return;
+      
+      try {
+        const payload = JSON.parse(txt);
+        await handleReorder(payload, parentId, parseInt(index));
+        await reloadBookmarks();
+        render();
+      } catch (err) {
+        console.error('Drop zone error:', err);
+      }
+    });
+    
+    return zone;
+  }
+
+  function insertDropZones(container, parentId) {
+    if (!state.dragState.isDragging) return;
+    
+    const children = Array.from(container.children).filter(child => 
+      !child.classList.contains('drop-zone') && 
+      !child.classList.contains('prd-stv-window-separator')
+    );
+    
+    children.forEach((child, index) => {
+      // Insert drop zone before each item
+      const zone = createDropZone(parentId, index, child, 'before');
+      container.appendChild(zone);
+    });
+    
+    // Insert final drop zone after last item
+    if (children.length > 0) {
+      const lastChild = children[children.length - 1];
+      const finalZone = createDropZone(parentId, children.length, lastChild, 'after');
+      container.appendChild(finalZone);
+    }
+  }
+
+  function removeAllDropZones() {
+    document.querySelectorAll('.drop-zone').forEach(zone => zone.remove());
+  }
+
+  function findParentContainer(parentId) {
+    if (!parentId) {
+      // Root level bookmarks
+      return document.getElementById('combined-list');
+    }
+    
+    // Find the folder element with this parent ID
+    const folderElement = document.querySelector(`.bm-folder[data-id="${parentId}"]`);
+    if (folderElement) {
+      const childrenContainer = folderElement.querySelector('.bm-children');
+      if (childrenContainer) {
+        return childrenContainer;
+      }
+    }
+    
+    // If not found, might be in root bookmarks
+    return document.getElementById('combined-list');
   }
 
   // Storage helpers
@@ -282,11 +379,52 @@
       }
       await reloadBookmarks();
       ensureExpanded(node.id);
-      renderBookmarks();
+      render();
     });
     header.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'folder', id: node.id }));
+      const payload = { type: 'folder', id: node.id, parentId: node.parentId };
+      e.dataTransfer.setData('text/plain', JSON.stringify(payload));
       e.dataTransfer.effectAllowed = 'move';
+      
+      // Add visual feedback
+      header.style.opacity = '0.5';
+      header.style.transform = 'rotate(2deg)';
+      
+      // Update drag state
+      state.dragState.isDragging = true;
+      state.dragState.draggedItem = payload;
+      state.dragState.draggedType = 'folder';
+      
+      // Insert drop zones after a small delay to allow render
+      setTimeout(() => {
+        // Insert drop zones in current parent
+        const parentContainer = findParentContainer(node.parentId);
+        if (parentContainer) {
+          insertDropZones(parentContainer, node.parentId);
+        }
+        
+        // Also insert drop zones in all expanded folders for cross-folder moves
+        document.querySelectorAll('.bm-folder').forEach(folder => {
+          const folderId = folder.dataset.id;
+          if (state.expanded.has(folderId)) {
+            const childrenContainer = folder.querySelector('.bm-children');
+            if (childrenContainer && folderId !== node.id) { // Don't add to self
+              insertDropZones(childrenContainer, folderId);
+            }
+          }
+        });
+      }, 10);
+    });
+
+    header.addEventListener('dragend', () => {
+      // Remove visual feedback
+      header.style.opacity = '';
+      header.style.transform = '';
+      
+      state.dragState.isDragging = false;
+      state.dragState.draggedItem = null;
+      state.dragState.draggedType = null;
+      removeAllDropZones();
     });
 
     wrapper.appendChild(header);
@@ -324,8 +462,49 @@
       }
     });
     div.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'bookmark', id: node.id }));
+      const payload = { type: 'bookmark', id: node.id, parentId: node.parentId };
+      e.dataTransfer.setData('text/plain', JSON.stringify(payload));
       e.dataTransfer.effectAllowed = 'move';
+      
+      // Add visual feedback
+      div.style.opacity = '0.5';
+      div.style.transform = 'rotate(2deg)';
+      
+      // Update drag state
+      state.dragState.isDragging = true;
+      state.dragState.draggedItem = payload;
+      state.dragState.draggedType = 'bookmark';
+      
+      // Insert drop zones after a small delay to allow render
+      setTimeout(() => {
+        // Insert drop zones in current parent
+        const parentContainer = findParentContainer(node.parentId);
+        if (parentContainer) {
+          insertDropZones(parentContainer, node.parentId);
+        }
+        
+        // Also insert drop zones in all expanded folders for cross-folder moves
+        document.querySelectorAll('.bm-folder').forEach(folder => {
+          const folderId = folder.dataset.id;
+          if (state.expanded.has(folderId)) {
+            const childrenContainer = folder.querySelector('.bm-children');
+            if (childrenContainer) {
+              insertDropZones(childrenContainer, folderId);
+            }
+          }
+        });
+      }, 10);
+    });
+
+    div.addEventListener('dragend', () => {
+      // Remove visual feedback
+      div.style.opacity = '';
+      div.style.transform = '';
+      
+      state.dragState.isDragging = false;
+      state.dragState.draggedItem = null;
+      state.dragState.draggedType = null;
+      removeAllDropZones();
     });
     return div;
   }
@@ -384,6 +563,50 @@
       if (!payload.url) return;
       await createIfNotDuplicate(folderId, payload.title || payload.url, payload.url);
       showToast('Bookmarked tab');
+    }
+  }
+
+  async function handleReorder(payload, targetParentId, targetIndex) {
+    if (!payload || !payload.id) return;
+    
+    try {
+      // Get current bookmark info to check current position
+      const bookmarkInfo = await chrome.bookmarks.get(payload.id);
+      if (!bookmarkInfo || !bookmarkInfo[0]) return;
+      
+      const currentItem = bookmarkInfo[0];
+      const currentParentId = currentItem.parentId;
+      
+      // Chrome API removes the item first, then inserts at new position
+      // We need to adjust based on whether we're moving up or down
+      let adjustedIndex = targetIndex;
+      
+      if (currentParentId === targetParentId) {
+        // Get all children to find current position
+        const siblings = await chrome.bookmarks.getChildren(currentParentId);
+        const currentIndex = siblings.findIndex(sibling => sibling.id === payload.id);
+        
+        // When moving within the same parent:
+        // - Moving up (to lower index): use target index as-is
+        // - Moving down (to higher index): no adjustment needed, Chrome handles it
+        // The issue was we were always subtracting 1 when moving down
+        adjustedIndex = targetIndex;
+      }
+      
+      // Perform the move
+      await chrome.bookmarks.move(payload.id, {
+        parentId: targetParentId,
+        index: adjustedIndex
+      });
+      
+      if (payload.type === 'bookmark') {
+        showToast('Bookmark reordered');
+      } else if (payload.type === 'folder') {
+        showToast('Folder reordered');
+      }
+    } catch (error) {
+      console.error('Reorder error:', error);
+      showToast('Failed to reorder item');
     }
   }
 
