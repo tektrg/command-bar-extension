@@ -156,8 +156,9 @@
 
 /* Toast */
 #prd-stv-toast {
-  position: fixed !important;
+  position: absolute !important;
   bottom: 48px !important;
+  height: 48px !important;
   left: 50% !important;
   transform: translateX(-50%) !important;
   background: #2b2b2b !important;
