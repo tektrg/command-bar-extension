@@ -56,8 +56,31 @@ const uiState = {
   },
   
   setItems(newItems) {
-    this.items = newItems || [];
+    this.items = this.sortItemsByLastVisited(newItems || []);
     this.selectedIdx = -1;
+  },
+  
+  sortItemsByLastVisited(items) {
+    return items.sort((a, b) => {
+      // Get last visited time for each item
+      const getLastVisited = (item) => {
+        if (item.lastAccessed) return item.lastAccessed; // tabs
+        if (item.lastVisitTime) return item.lastVisitTime; // history
+        if (item.dateAdded) return item.dateAdded; // bookmarks fallback
+        return 0; // fallback for items without time data
+      };
+      
+      const aTime = getLastVisited(a);
+      const bTime = getLastVisited(b);
+      
+      // Debug logging - remove after testing
+      if (console && console.log) {
+        console.log(`Sorting: ${a.title} (${aTime}) vs ${b.title} (${bTime})`);
+      }
+      
+      // Sort in descending order (most recent first)
+      return bTime - aTime;
+    });
   }
 };
 
