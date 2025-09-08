@@ -425,6 +425,9 @@
       state.dragState.draggedItem = null;
       state.dragState.draggedType = null;
       removeAllDropZones();
+      
+      // Re-render to catch any missed updates during drag
+      render();
     });
 
     wrapper.appendChild(header);
@@ -505,6 +508,9 @@
       state.dragState.draggedItem = null;
       state.dragState.draggedType = null;
       removeAllDropZones();
+      
+      // Re-render to catch any missed updates during drag
+      render();
     });
     return div;
   }
@@ -732,31 +738,48 @@
       chrome.bookmarks.onCreated.addListener((id, bm) => {
         reloadBookmarks().then(() => { 
           if (bm && bm.parentId) ensureExpanded(bm.parentId); 
-          render(); 
+          if (!state.dragState.isDragging) render(); 
         });
       });
       chrome.bookmarks.onMoved.addListener((id, info) => {
         reloadBookmarks().then(() => { 
           if (info && info.parentId) ensureExpanded(info.parentId); 
-          render(); 
+          if (!state.dragState.isDragging) render(); 
         });
       });
       chrome.bookmarks.onChanged.addListener(() => {
-        reloadBookmarks().then(() => render());
+        reloadBookmarks().then(() => {
+          if (!state.dragState.isDragging) render();
+        });
       });
       chrome.bookmarks.onRemoved.addListener(() => {
-        reloadBookmarks().then(() => render());
+        reloadBookmarks().then(() => {
+          if (!state.dragState.isDragging) render();
+        });
       });
       
       // Listen for tab changes to update the tabs list
       chrome.tabs.onCreated.addListener(() => {
-        reloadTabs().then(() => render());
+        reloadTabs().then(() => {
+          if (!state.dragState.isDragging) render();
+        });
       });
       chrome.tabs.onRemoved.addListener(() => {
-        reloadTabs().then(() => render());
+        reloadTabs().then(() => {
+          if (!state.dragState.isDragging) render();
+        });
       });
-      chrome.tabs.onUpdated.addListener(() => {
-        reloadTabs().then(() => render());
+      const debouncedTabUpdate = debounce(() => {
+        reloadTabs().then(() => {
+          if (!state.dragState.isDragging) render();
+        });
+      }, 500); // Only update tabs every 500ms
+      
+      chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+        // Only reload on meaningful changes that affect display
+        if (changeInfo.title || changeInfo.url || changeInfo.favIconUrl) {
+          debouncedTabUpdate();
+        }
       });
     } catch {}
   });

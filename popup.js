@@ -394,6 +394,9 @@
       state.dragState.draggedItem = null;
       state.dragState.draggedType = null;
       removeAllDropZones();
+      
+      // Re-render to catch any missed updates during drag
+      render();
     });
 
     wrapper.appendChild(header);
@@ -472,6 +475,9 @@
       state.dragState.draggedItem = null;
       state.dragState.draggedType = null;
       removeAllDropZones();
+      
+      // Re-render to catch any missed updates during drag
+      render();
     });
     return div;
   }
@@ -759,16 +765,41 @@
     // Live-update UI on external bookmark changes
     try {
       chrome.bookmarks.onCreated.addListener((id, bm) => {
-        reloadBookmarks().then(() => { if (bm && bm.parentId) ensureExpanded(bm.parentId); renderBookmarks(); });
+        reloadBookmarks().then(() => { 
+          if (bm && bm.parentId) ensureExpanded(bm.parentId); 
+          if (!state.dragState.isDragging) renderBookmarks(); 
+        });
       });
       chrome.bookmarks.onMoved.addListener((id, info) => {
-        reloadBookmarks().then(() => { if (info && info.parentId) ensureExpanded(info.parentId); renderBookmarks(); });
+        reloadBookmarks().then(() => { 
+          if (info && info.parentId) ensureExpanded(info.parentId); 
+          if (!state.dragState.isDragging) renderBookmarks(); 
+        });
       });
       chrome.bookmarks.onChanged.addListener(() => {
-        reloadBookmarks().then(() => renderBookmarks());
+        reloadBookmarks().then(() => {
+          if (!state.dragState.isDragging) renderBookmarks();
+        });
       });
       chrome.bookmarks.onRemoved.addListener(() => {
-        reloadBookmarks().then(() => renderBookmarks());
+        reloadBookmarks().then(() => {
+          if (!state.dragState.isDragging) renderBookmarks();
+        });
+      });
+      
+      // Add debounced tab update handler for popup too
+      const debouncedTabUpdate = debounce(() => {
+        reloadTabs().then(() => {
+          if (!state.dragState.isDragging) renderTabs();
+        });
+      }, 500);
+      
+      chrome.tabs.onCreated.addListener(debouncedTabUpdate);
+      chrome.tabs.onRemoved.addListener(debouncedTabUpdate);
+      chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+        if (changeInfo.title || changeInfo.url || changeInfo.favIconUrl) {
+          debouncedTabUpdate();
+        }
       });
     } catch {}
   });
