@@ -190,5 +190,48 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ count: tabs.length });
     });
     return true; // async
+  } else if (msg.type === "RENAME_BOOKMARK") {
+    const { bookmarkId, newTitle } = msg;
+    chrome.bookmarks.update(bookmarkId, { title: newTitle }, (result) => {
+      if (chrome.runtime.lastError) {
+        console.error('Failed to rename bookmark:', chrome.runtime.lastError);
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true, result });
+      }
+    });
+    return true; // async
+  } else if (msg.type === "MOVE_BOOKMARK") {
+    const { bookmarkId, destinationId } = msg;
+    chrome.bookmarks.move(bookmarkId, { parentId: destinationId }, (result) => {
+      if (chrome.runtime.lastError) {
+        console.error('Failed to move bookmark:', chrome.runtime.lastError);
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true, result });
+      }
+    });
+    return true; // async
+  } else if (msg.type === "GET_BOOKMARK_TREE") {
+    chrome.bookmarks.getTree((tree) => {
+      if (chrome.runtime.lastError) {
+        console.error('Failed to get bookmark tree:', chrome.runtime.lastError);
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse(tree);
+      }
+    });
+    return true; // async
+  } else if (msg.type === "CREATE_BOOKMARK") {
+    const { bookmarkData } = msg;
+    chrome.bookmarks.create(bookmarkData, (result) => {
+      if (chrome.runtime.lastError) {
+        console.error('Failed to create bookmark:', chrome.runtime.lastError);
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true, result });
+      }
+    });
+    return true; // async
   }
 });
