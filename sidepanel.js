@@ -141,8 +141,11 @@
     // Set focus to input
     elements.input.focus();
     
-    await window.storage.loadExpandedFolders(state);
-    await Promise.all([reloadBookmarks(), reloadTabs()]);
+    await Promise.all([
+      window.storage.loadExpandedFolders(state),
+      reloadBookmarks(), 
+      reloadTabs()
+    ]);
     window.renderer.render(state, elements);
 
     elements.input.addEventListener('input', onSearch);
