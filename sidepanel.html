@@ -168,6 +168,49 @@
         font-weight: bold;
       }
       
+      /* Bookmark highlighting styles */
+      .bookmark-highlighted {
+        background: #2d4a3a;
+        border-left: 3px solid #4a9e5f;
+      }
+      .bookmark-highlighted:hover {
+        background: #3a5a4a;
+      }
+      .bookmark-highlighted .prd-stv-title {
+        color: #a8e6a3;
+      }
+      
+      /* Tab dimming styles for bookmark-opened tabs */
+      .tab-from-bookmark {
+        opacity: 0.6;
+        background: #2a2a2a;
+        pointer-events: auto; /* Keep close button functional */
+      }
+      .tab-from-bookmark:hover {
+        opacity: 0.7;
+        background: #323232;
+      }
+      .tab-from-bookmark .prd-stv-title {
+        color: #999;
+      }
+      .tab-from-bookmark .active-indicator {
+        color: #666;
+      }
+      
+      /* Close tab button styling for highlighted bookmarks */
+      .close-tab-btn {
+        background: linear-gradient(90deg, transparent 0%, #2d4a3a 30%, #2d4a3a 100%);
+        color: #ff6b6b;
+        font-weight: bold;
+      }
+      .bookmark-highlighted:hover .close-tab-btn {
+        background: linear-gradient(90deg, transparent 0%, #3a5a4a 30%, #3a5a4a 100%);
+      }
+      .close-tab-btn:hover {
+        background: #ff4444 !important;
+        color: white;
+      }
+
       /* Window separator */
       .prd-stv-window-separator {
         display: flex;
