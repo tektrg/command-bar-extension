@@ -94,26 +94,34 @@ const renderer = {
 
   renderBookmarkItem: (node, state) => {
     const div = document.createElement('div');
-    div.className = 'prd-stv-cmd-item bm-bookmark';
+    const hasOpenTab = state.bookmarkTabRelationships[node.id];
+    div.className = hasOpenTab ? 'prd-stv-cmd-item bm-bookmark bookmark-highlighted' : 'prd-stv-cmd-item bm-bookmark';
     div.dataset.id = node.id;
     div.setAttribute('draggable', 'true');
     const { ITEM_TYPES } = window.CONSTANTS;
     const favicon = window.utils.getFavicon({ type: ITEM_TYPES.BOOKMARK, url: node.url });
     const query = state.query;
+    const buttonText = hasOpenTab ? '−' : '×';
+    const buttonTitle = hasOpenTab ? 'Close tab' : 'Delete bookmark';
+    
     div.innerHTML = `
       <div style="display:flex;flex:1;align-items:center;min-width:0;">
         <img class="prd-stv-favicon" src="${favicon}" onerror="this.src='${window.CONSTANTS.ICONS.FALLBACK}'" />
         <span class="prd-stv-title">${window.utils.highlightMatches(node.title || node.url, query)}</span>
       </div>
-      <button class="prd-stv-close-btn" title="Delete bookmark">×</button>
+      <button class="prd-stv-close-btn ${hasOpenTab ? 'close-tab-btn' : ''}" title="${buttonTitle}">${buttonText}</button>
     `;
     
     div.addEventListener('click', (e) => {
       if (e.target.classList.contains('prd-stv-close-btn')) {
         e.stopPropagation();
-        window.deleteBookmark(node.id);
+        if (hasOpenTab) {
+          window.closeTabFromBookmark(node.id);
+        } else {
+          window.deleteBookmark(node.id);
+        }
       } else {
-        window.openUrl(node.url, e);
+        window.openUrl(node.url, e, node.id);
       }
     });
     
@@ -124,11 +132,17 @@ const renderer = {
 
   renderTabItem: (tab, state) => {
     const div = document.createElement('div');
-    div.className = tab.active ? 'prd-stv-cmd-item active-tab' : 'prd-stv-cmd-item';
+    const isFromBookmark = Object.values(state.bookmarkTabRelationships).includes(tab.id);
+    let className = 'prd-stv-cmd-item';
+    if (tab.active) className += ' active-tab';
+    if (isFromBookmark) className += ' tab-from-bookmark';
+    
+    div.className = className;
     div.dataset.id = String(tab.id);
     div.setAttribute('draggable', 'true');
     const { ITEM_TYPES } = window.CONSTANTS;
     const favicon = window.utils.getFavicon({ type: ITEM_TYPES.TAB, icon: tab.favIconUrl, url: tab.url });
+    
     div.innerHTML = `
       <div style="display:flex;flex:1;align-items:center;min-width:0;">
         <img class="prd-stv-favicon" src="${favicon}" onerror="this.src='${window.CONSTANTS.ICONS.FALLBACK}'" />
@@ -138,14 +152,25 @@ const renderer = {
       <button class="prd-stv-close-btn" title="Close tab">×</button>
     `;
     
-    div.addEventListener('click', (e) => {
-      if (e.target.classList.contains('prd-stv-close-btn')) {
-        e.stopPropagation();
-        window.closeTab(tab.id);
-      } else {
-        window.activateTab(tab);
-      }
-    });
+    // Make bookmark-opened tabs less interactive (dimmed)
+    if (isFromBookmark) {
+      div.addEventListener('click', (e) => {
+        if (e.target.classList.contains('prd-stv-close-btn')) {
+          e.stopPropagation();
+          window.closeTab(tab.id);
+        }
+        // Don't allow activation of dimmed tabs - they should be controlled via bookmarks
+      });
+    } else {
+      div.addEventListener('click', (e) => {
+        if (e.target.classList.contains('prd-stv-close-btn')) {
+          e.stopPropagation();
+          window.closeTab(tab.id);
+        } else {
+          window.activateTab(tab);
+        }
+      });
+    }
     
     div.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'tab', id: tab.id, title: tab.title, url: tab.url }));
