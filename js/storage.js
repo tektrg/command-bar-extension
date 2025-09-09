@@ -31,7 +31,8 @@ const storage = {
 
   async saveExpandedFolders(state) {
     const { STORAGE_KEYS } = window.CONSTANTS;
-    return await this.save(STORAGE_KEYS.EXPANDED_FOLDERS, Array.from(state.expanded));
+    const expandedArray = Array.from(state.expanded);
+    return await this.save(STORAGE_KEYS.EXPANDED_FOLDERS, expandedArray);
   }
 };
 
