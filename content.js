@@ -464,13 +464,25 @@ function showDeleteConfirm() {
     div.dataset.idx = index;
     
     const iconHtml = getIconHtml(item);
+    
+    // Add 3-dots menu for bookmarks and tabs
+    const isBookmark = item.type === 'bookmark';
+    const isTab = item.type === 'tab';
+    const controlsHtml = (isBookmark || isTab) ? `
+      <div class="prd-stv-item-controls" style="opacity:0;transition:opacity 0.2s ease;margin-left:auto;padding-left:8px;">
+        <button class="prd-stv-menu-btn" title="More options" ${isBookmark ? `data-bookmark-id="${item.id}"` : `data-tab-id="${item.id}"`}
+          style="background:transparent;border:none;color:#9b9b9b;font-size:16px;cursor:pointer;padding:4px;border-radius:3px;">⋯</button>
+      </div>
+    ` : '';
+    
     div.innerHTML = `
-      <div style="display:flex;">
+      <div style="display:flex;align-items:center;width:100%;">
         ${iconHtml}
-        <div style="display:flex;flex-direction:column;">
+        <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
           <span>${highlightMatches(item.title || item.url, input?.value.trim())}</span>
           <span class="prd-stv-url">${getSubtitle(item)}</span>
         </div>
+        ${controlsHtml}
       </div>
     `;
     
@@ -483,9 +495,29 @@ function showDeleteConfirm() {
     // }
     
     // Add click handler
-    div.addEventListener('click', () => {
-      messageService.open(item);
-      destroyOverlay();
+    div.addEventListener('click', (e) => {
+      if (e.target.classList.contains('prd-stv-menu-btn')) {
+        e.stopPropagation();
+        if (item.type === 'bookmark') {
+          showBookmarkContextMenu(e, item, div);
+        } else if (item.type === 'tab') {
+          showTabContextMenu(e, item, div);
+        }
+      } else {
+        messageService.open(item);
+        destroyOverlay();
+      }
+    });
+    
+    // Show menu button on hover
+    div.addEventListener('mouseenter', () => {
+      const controls = div.querySelector('.prd-stv-item-controls');
+      if (controls) controls.style.opacity = '1';
+    });
+    
+    div.addEventListener('mouseleave', () => {
+      const controls = div.querySelector('.prd-stv-item-controls');
+      if (controls) controls.style.opacity = '0';
     });
     
     return div;
@@ -643,6 +675,263 @@ function showToast(message, duration = 2000) {
         }
       }
     });
+  }
+
+  // Bookmark context menu for content.js overlay
+  function showBookmarkContextMenu(event, bookmark, itemElement) {
+    // Remove any existing context menu
+    closeBookmarkContextMenu();
+    
+    // Create context menu
+    const contextMenu = document.createElement('div');
+    contextMenu.id = 'prd-stv-bookmark-context-menu';
+    contextMenu.style.cssText = `
+      position: fixed;
+      background: #2b2b2b;
+      border: 1px solid #555;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      min-width: 120px;
+      overflow: hidden;
+      z-index: 2147483648;
+      animation: contextMenuIn 0.15s ease-out;
+    `;
+    
+    contextMenu.innerHTML = `
+      <div class="context-item" data-action="rename" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
+        <span>Rename</span>
+      </div>
+      <div class="context-item" data-action="move" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;">
+        <span>Move to...</span>
+      </div>
+    `;
+    
+    // Add hover styles
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes contextMenuIn {
+        from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      #prd-stv-bookmark-context-menu .context-item:hover {
+        background: #353535 !important;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Position the menu relative to the clicked button
+    const buttonRect = event.target.getBoundingClientRect();
+    contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
+    contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
+    
+    // Add to document
+    document.body.appendChild(contextMenu);
+    
+    // Handle menu item clicks
+    contextMenu.addEventListener('click', (e) => {
+      const action = e.target.closest('.context-item')?.dataset.action;
+      if (action === 'rename') {
+        startBookmarkRename(bookmark, itemElement);
+      } else if (action === 'move') {
+        showBookmarkMoveDialog(bookmark);
+      }
+      closeBookmarkContextMenu();
+    });
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+      document.addEventListener('click', closeBookmarkContextMenu, { once: true });
+    }, 10);
+  }
+
+  function closeBookmarkContextMenu() {
+    const existingMenu = document.getElementById('prd-stv-bookmark-context-menu');
+    if (existingMenu) {
+      existingMenu.remove();
+    }
+  }
+
+  function startBookmarkRename(bookmark, itemElement) {
+    const titleElement = itemElement.querySelector('span');
+    const currentTitle = bookmark.title;
+    
+    // Create input element
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentTitle;
+    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:2px;font-size:14px;outline:none;width:100%;';
+    
+    // Replace title with input
+    titleElement.innerHTML = '';
+    titleElement.appendChild(input);
+    input.focus();
+    input.select();
+    
+    const finishRename = async (save = false) => {
+      const newTitle = input.value.trim();
+      if (save && newTitle && newTitle !== currentTitle) {
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'RENAME_BOOKMARK',
+            bookmarkId: bookmark.id,
+            newTitle: newTitle
+          });
+          bookmark.title = newTitle; // Update local state
+          showToast('Bookmark renamed');
+        } catch (error) {
+          console.error('Failed to rename bookmark:', error);
+          showToast('Failed to rename bookmark');
+        }
+      }
+      
+      // Restore original title display
+      titleElement.innerHTML = highlightMatches(bookmark.title || bookmark.url, input?.value.trim() || '');
+    };
+    
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finishRename(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        finishRename(false);
+      }
+    });
+    
+    input.addEventListener('blur', () => finishRename(true));
+  }
+
+  function showBookmarkMoveDialog(bookmark) {
+    if (bookmark._isTab) {
+      // For tabs, save directly to bookmarks bar in overlay
+      handleSaveTabAsBookmark(bookmark._tabData);
+    } else {
+      // For bookmarks, show message to use side panel
+      showToast('Move functionality available in side panel');
+    }
+  }
+
+  function showTabContextMenu(event, tab, itemElement) {
+    // Remove any existing context menu
+    closeTabContextMenu();
+    
+    // Create context menu
+    const contextMenu = document.createElement('div');
+    contextMenu.id = 'prd-stv-tab-context-menu';
+    contextMenu.style.cssText = `
+      position: fixed;
+      background: #2b2b2b;
+      border: 1px solid #555;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      min-width: 120px;
+      overflow: hidden;
+      z-index: 2147483648;
+      animation: contextMenuIn 0.15s ease-out;
+    `;
+    
+    contextMenu.innerHTML = `
+      <div class="context-item" data-action="move-to-folder" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
+        <span>Move to...</span>
+      </div>
+      <div class="context-item" data-action="duplicate" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;">
+        <span>Duplicate Tab</span>
+      </div>
+    `;
+    
+    // Add hover styles
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes contextMenuIn {
+        from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      #prd-stv-tab-context-menu .context-item:hover {
+        background: #353535 !important;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Position the menu relative to the clicked button
+    const buttonRect = event.target.getBoundingClientRect();
+    contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
+    contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
+    
+    // Add to document
+    document.body.appendChild(contextMenu);
+    
+    // Handle menu item clicks
+    contextMenu.addEventListener('click', async (e) => {
+      const action = e.target.closest('.context-item')?.dataset.action;
+      if (action === 'move-to-folder') {
+        // Create a fake bookmark object to reuse the existing move dialog
+        const fakeBookmark = {
+          id: `tab_${tab.id}`,
+          title: tab.title || 'Untitled',
+          url: tab.url,
+          _isTab: true,
+          _tabData: tab
+        };
+        showBookmarkMoveDialog(fakeBookmark);
+      } else if (action === 'duplicate') {
+        await handleDuplicateTab(tab);
+      }
+      closeTabContextMenu();
+    });
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+      document.addEventListener('click', closeTabContextMenu, { once: true });
+    }, 10);
+  }
+
+  function closeTabContextMenu() {
+    const existingMenu = document.getElementById('prd-stv-tab-context-menu');
+    if (existingMenu) {
+      existingMenu.remove();
+    }
+  }
+
+  async function handleSaveTabAsBookmark(tab) {
+    try {
+      // For simplicity in overlay, save to default bookmarks bar
+      // Full folder selection functionality is available in side panel
+      const bookmarkData = {
+        parentId: '1', // Bookmarks bar
+        title: tab.title || 'Untitled',
+        url: tab.url
+      };
+      
+      const result = await chrome.runtime.sendMessage({
+        type: 'CREATE_BOOKMARK',
+        bookmarkData: bookmarkData
+      });
+      
+      if (result && result.success) {
+        showToast('Tab saved as bookmark');
+        destroyOverlay();
+      } else {
+        throw new Error(result?.error || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('Failed to save tab as bookmark:', error);
+      showToast('Failed to save bookmark');
+    }
+  }
+
+  async function handleDuplicateTab(tab) {
+    try {
+      await chrome.tabs.create({ 
+        url: tab.url,
+        windowId: tab.windowId,
+        index: tab.index + 1
+      });
+      showToast('Tab duplicated');
+      destroyOverlay();
+    } catch (error) {
+      console.error('Failed to duplicate tab:', error);
+      showToast('Failed to duplicate tab');
+    }
   }
 
   chrome.runtime.onMessage.addListener((msg) => {
