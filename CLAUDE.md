@@ -52,6 +52,15 @@ The extension follows Chrome Extension Manifest V3 architecture with three main 
 
 **Injection Strategy**: Content script uses injection guards (`window.__cmdBarInjected`) to prevent multiple injections and dynamically injects itself when the keyboard command is triggered.
 
+**Modular Architecture**: The codebase follows KISS (Keep It Simple, Stupid) and DRY (Don't Repeat Yourself) principles with a modular approach:
+- **Separation of Concerns**: Each module has a single responsibility (e.g., `sidepanel.js` handles main logic, separate modules for rendering, storage, utilities)
+- **Global Module Pattern**: Modules expose functions to `window` object for cross-module communication (e.g., `window.renderer`, `window.utils`, `window.storage`)
+- **State Management**: Centralized state object with clear data structures and relationships
+- **Function Modularity**: Small, focused functions that do one thing well
+- **Debounced Operations**: Performance optimization for frequent operations like search and tab updates
+- **Event-Driven Updates**: Chrome API listeners trigger state updates and UI re-renders
+- **Error Handling**: Graceful error handling with user feedback via toast notifications
+
 ## Development Commands
 
 Since this is a vanilla JavaScript Chrome extension without build tools, there are no npm/build commands. Development involves:
