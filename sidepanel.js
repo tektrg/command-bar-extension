@@ -15,12 +15,37 @@
     expanded: new Set(),
     tabs: [],
     filteredTabs: [],
+    bookmarkTabRelationships: {}, // bookmarkId -> tabId mapping
     dragState: {
       isDragging: false,
       draggedItem: null,
       draggedType: null,
     },
   };
+
+  // Bookmark-tab relationship management
+  function createBookmarkTabRelationship(bookmarkId, tabId) {
+    state.bookmarkTabRelationships[bookmarkId] = tabId;
+  }
+
+  function removeBookmarkTabRelationship(tabId) {
+    // Remove relationship when tab is closed
+    for (const [bookmarkId, relatedTabId] of Object.entries(state.bookmarkTabRelationships)) {
+      if (relatedTabId === tabId) {
+        delete state.bookmarkTabRelationships[bookmarkId];
+        break;
+      }
+    }
+  }
+
+  function getBookmarkForTab(tabId) {
+    for (const [bookmarkId, relatedTabId] of Object.entries(state.bookmarkTabRelationships)) {
+      if (relatedTabId === tabId) {
+        return bookmarkId;
+      }
+    }
+    return null;
+  }
 
   // Tab and bookmark operations
   async function activateTab(tab) {
@@ -34,10 +59,27 @@
 
   async function closeTab(tabId) {
     try {
+      // Remove bookmark-tab relationship before closing
+      removeBookmarkTabRelationship(tabId);
       await chrome.tabs.remove(tabId);
       await reloadTabs();
       window.renderer.render(state, elements);
       window.utils.showToast('Tab closed');
+    } catch {
+      window.utils.showToast('Failed to close tab');
+    }
+  }
+
+  async function closeTabFromBookmark(bookmarkId) {
+    try {
+      const tabId = state.bookmarkTabRelationships[bookmarkId];
+      if (tabId) {
+        removeBookmarkTabRelationship(tabId);
+        await chrome.tabs.remove(tabId);
+        await reloadTabs();
+        window.renderer.render(state, elements);
+        window.utils.showToast('Tab closed');
+      }
     } catch {
       window.utils.showToast('Failed to close tab');
     }
@@ -54,20 +96,28 @@
     }
   }
 
-  async function openUrl(url, mouseEvent) {
+  async function openUrl(url, mouseEvent, bookmarkId = null) {
     if (!url) return;
     try {
+      let targetTab;
       if (mouseEvent && (mouseEvent.ctrlKey || mouseEvent.metaKey)) {
         // Open in current tab
         const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (active && active.id) {
-          await chrome.tabs.update(active.id, { url });
+          targetTab = await chrome.tabs.update(active.id, { url });
         } else {
-          await chrome.tabs.create({ url });
+          targetTab = await chrome.tabs.create({ url });
         }
       } else {
         // Open in new tab
-        await chrome.tabs.create({ url });
+        targetTab = await chrome.tabs.create({ url });
+      }
+      
+      // Create bookmark-tab relationship if this was opened from a bookmark
+      if (bookmarkId && targetTab && targetTab.id) {
+        createBookmarkTabRelationship(bookmarkId, targetTab.id);
+        // Re-render to show the updated relationship
+        window.renderer.render(state, elements);
       }
     } catch {}
   }
@@ -126,6 +176,7 @@
   // Expose necessary functions and state to global scope for other modules
   window.activateTab = activateTab;
   window.closeTab = closeTab;
+  window.closeTabFromBookmark = closeTabFromBookmark;
   window.deleteBookmark = deleteBookmark;
   window.openUrl = openUrl;
   window.reloadBookmarks = reloadBookmarks;
@@ -181,7 +232,9 @@
           if (!state.dragState.isDragging) window.renderer.render(state, elements);
         });
       });
-      chrome.tabs.onRemoved.addListener(() => {
+      chrome.tabs.onRemoved.addListener((tabId) => {
+        // Clean up bookmark-tab relationship when tab is closed
+        removeBookmarkTabRelationship(tabId);
         reloadTabs().then(() => {
           if (!state.dragState.isDragging) window.renderer.render(state, elements);
         });
