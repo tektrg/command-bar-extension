@@ -11,7 +11,9 @@
       "Bash(cd:*)",
       "Bash(cd:*)",
       "Bash(cd:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(node:*)",
+      "Read(/Users/trungluong/**)"
     ],
     "deny": []
   }
