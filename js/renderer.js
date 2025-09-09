@@ -109,7 +109,10 @@ const renderer = {
         <img class="prd-stv-favicon" src="${favicon}" onerror="this.src='${window.CONSTANTS.ICONS.FALLBACK}'" />
         <span class="prd-stv-title">${window.utils.highlightMatches(node.title || node.url, query)}</span>
       </div>
-      <button class="prd-stv-close-btn ${hasOpenTab ? 'close-tab-btn' : ''}" title="${buttonTitle}">${buttonText}</button>
+      <div class="prd-stv-item-controls">
+        <button class="prd-stv-menu-btn" title="More options" data-bookmark-id="${node.id}">⋯</button>
+        <button class="prd-stv-close-btn ${hasOpenTab ? 'close-tab-btn' : ''}" title="${buttonTitle}">${buttonText}</button>
+      </div>
     `;
     
     div.addEventListener('click', (e) => {
@@ -120,6 +123,9 @@ const renderer = {
         } else {
           window.deleteBookmark(node.id);
         }
+      } else if (e.target.classList.contains('prd-stv-menu-btn')) {
+        e.stopPropagation();
+        renderer.showContextMenu(e, node, div);
       } else {
         window.openUrl(node.url, e, node.id);
       }
@@ -149,7 +155,10 @@ const renderer = {
         <span class="prd-stv-title">${window.utils.highlightMatches(tab.title || tab.url || '', state.query)}</span>
         ${tab.active ? '<span class="active-indicator">●</span>' : ''}
       </div>
-      <button class="prd-stv-close-btn" title="Close tab">×</button>
+      <div class="prd-stv-item-controls">
+        <button class="prd-stv-menu-btn" title="More options" data-tab-id="${tab.id}">⋯</button>
+        <button class="prd-stv-close-btn" title="Close tab">×</button>
+      </div>
     `;
     
     // Make bookmark-opened tabs less interactive (dimmed)
@@ -158,6 +167,9 @@ const renderer = {
         if (e.target.classList.contains('prd-stv-close-btn')) {
           e.stopPropagation();
           window.closeTab(tab.id);
+        } else if (e.target.classList.contains('prd-stv-menu-btn')) {
+          e.stopPropagation();
+          renderer.showTabContextMenu(e, tab, div);
         }
         // Don't allow activation of dimmed tabs - they should be controlled via bookmarks
       });
@@ -166,6 +178,9 @@ const renderer = {
         if (e.target.classList.contains('prd-stv-close-btn')) {
           e.stopPropagation();
           window.closeTab(tab.id);
+        } else if (e.target.classList.contains('prd-stv-menu-btn')) {
+          e.stopPropagation();
+          renderer.showTabContextMenu(e, tab, div);
         } else {
           window.activateTab(tab);
         }
@@ -314,7 +329,391 @@ const renderer = {
       // Re-render to catch any missed updates during drag
       window.renderer.render(state, window.elements);
     });
-  }
+  },
+
+  showContextMenu: (event, bookmark, itemElement) => {
+    // Remove any existing context menu
+    renderer.closeContextMenu();
+    
+    // Create context menu
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'prd-stv-context-menu';
+    contextMenu.innerHTML = `
+      <div class="prd-stv-context-item" data-action="rename">
+        <span>Rename</span>
+      </div>
+      <div class="prd-stv-context-item" data-action="move">
+        <span>Move to...</span>
+      </div>
+    `;
+    
+    // Position the menu relative to the clicked button
+    const buttonRect = event.target.getBoundingClientRect();
+    contextMenu.style.position = 'fixed';
+    contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
+    contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
+    contextMenu.style.zIndex = '10000';
+    
+    // Add to document
+    document.body.appendChild(contextMenu);
+    
+    // Handle menu item clicks
+    contextMenu.addEventListener('click', (e) => {
+      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+      if (action === 'rename') {
+        renderer.startRename(bookmark, itemElement);
+      } else if (action === 'move') {
+        renderer.showMoveDialog(bookmark);
+      }
+      renderer.closeContextMenu();
+    });
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+      document.addEventListener('click', renderer.closeContextMenu, { once: true });
+    }, 10);
+  },
+
+  closeContextMenu: () => {
+    const existingMenu = document.querySelector('.prd-stv-context-menu');
+    if (existingMenu) {
+      existingMenu.remove();
+    }
+  },
+
+  showTabContextMenu: (event, tab, itemElement) => {
+    // Remove any existing context menu
+    renderer.closeContextMenu();
+    
+    // Create context menu for tabs
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'prd-stv-context-menu';
+    contextMenu.innerHTML = `
+      <div class="prd-stv-context-item" data-action="move-to-folder">
+        <span>Move to...</span>
+      </div>
+      <div class="prd-stv-context-item" data-action="duplicate">
+        <span>Duplicate Tab</span>
+      </div>
+    `;
+    
+    // Position the menu relative to the clicked button
+    const buttonRect = event.target.getBoundingClientRect();
+    contextMenu.style.position = 'fixed';
+    contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
+    contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
+    contextMenu.style.zIndex = '10000';
+    
+    // Add to document
+    document.body.appendChild(contextMenu);
+    
+    // Handle menu item clicks
+    contextMenu.addEventListener('click', (e) => {
+      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+      if (action === 'move-to-folder') {
+        // Create a fake bookmark object to reuse the existing move dialog
+        const fakeBookmark = {
+          id: `tab_${tab.id}`,
+          title: tab.title || 'Untitled',
+          url: tab.url,
+          _isTab: true,
+          _tabData: tab
+        };
+        renderer.showMoveDialog(fakeBookmark);
+      } else if (action === 'duplicate') {
+        window.duplicateTab(tab);
+      }
+      renderer.closeContextMenu();
+    });
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+      document.addEventListener('click', renderer.closeContextMenu, { once: true });
+    }, 10);
+  },
+
+  startRename: (bookmark, itemElement) => {
+    const titleElement = itemElement.querySelector('.prd-stv-title');
+    const currentTitle = bookmark.title;
+    
+    // Create input element
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentTitle;
+    input.className = 'prd-stv-rename-input';
+    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:2px;font-size:14px;outline:none;width:100%;';
+    
+    // Replace title with input
+    titleElement.innerHTML = '';
+    titleElement.appendChild(input);
+    input.focus();
+    input.select();
+    
+    const finishRename = async (save = false) => {
+      const newTitle = input.value.trim();
+      if (save && newTitle && newTitle !== currentTitle) {
+        try {
+          await chrome.runtime.sendMessage({
+            type: 'RENAME_BOOKMARK',
+            bookmarkId: bookmark.id,
+            newTitle: newTitle
+          });
+          bookmark.title = newTitle; // Update local state
+          window.utils.showToast('Bookmark renamed');
+        } catch (error) {
+          console.error('Failed to rename bookmark:', error);
+          window.utils.showToast('Failed to rename bookmark');
+        }
+      }
+      
+      // Restore original title display
+      titleElement.innerHTML = window.utils.highlightMatches(bookmark.title || bookmark.url, window.state?.query || '');
+    };
+    
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finishRename(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        finishRename(false);
+      }
+    });
+    
+    input.addEventListener('blur', () => finishRename(true));
+  },
+
+  showMoveDialog: (bookmark) => {
+    // Remove any existing move dialog
+    const existingDialog = document.querySelector('.prd-stv-move-dialog');
+    if (existingDialog) existingDialog.remove();
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'prd-stv-move-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:20000;display:flex;align-items:center;justify-content:center;';
+    
+    // Create dialog
+    const dialog = document.createElement('div');
+    dialog.className = 'prd-stv-move-dialog';
+    dialog.style.cssText = 'background:#2b2b2b;border-radius:8px;padding:20px;width:400px;max-width:90%;max-height:80%;color:#f5f5f5;';
+    
+    const isTab = bookmark._isTab;
+    const actionText = isTab ? 'Save' : 'Move';
+    const titleText = isTab ? `Save "${bookmark.title}" as bookmark` : `Move "${bookmark.title}" to folder`;
+    
+    dialog.innerHTML = `
+      <h3 style="margin:0 0 16px 0;font-size:16px;">${titleText}</h3>
+      <input type="text" class="prd-stv-folder-search" placeholder="Search folders..." 
+        style="width:100%;padding:8px;background:#3a3a3a;border:1px solid #555;color:#fff;border-radius:4px;margin-bottom:16px;box-sizing:border-box;">
+      <div class="prd-stv-folder-list" style="max-height:300px;overflow-y:auto;border:1px solid #555;border-radius:4px;">
+        <div style="padding:16px;text-align:center;color:#999;">Loading folders...</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+        <button class="prd-stv-cancel-btn" style="padding:8px 16px;background:#555;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
+        <button class="prd-stv-move-btn" style="padding:8px 16px;background:#b9a079;color:#000;border:none;border-radius:4px;cursor:pointer;" disabled>${actionText}</button>
+      </div>
+    `;
+    
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    // Load folder tree and setup interactions
+    renderer.setupMoveDialog(dialog, bookmark, overlay);
+    
+    // Auto-focus the search input
+    const searchInput = dialog.querySelector('.prd-stv-folder-search');
+    if (searchInput) {
+      setTimeout(() => searchInput.focus(), 100); // Small delay to ensure modal is fully rendered
+    }
+  },
+
+  setupMoveDialog: async (dialog, bookmark, overlay) => {
+    const folderList = dialog.querySelector('.prd-stv-folder-list');
+    const searchInput = dialog.querySelector('.prd-stv-folder-search');
+    const moveBtn = dialog.querySelector('.prd-stv-move-btn');
+    const cancelBtn = dialog.querySelector('.prd-stv-cancel-btn');
+    let selectedFolderId = null;
+    let allFolders = [];
+    let filteredFolders = [];
+    let selectedIndex = -1;
+    
+    const updateSelection = (folderId) => {
+      selectedFolderId = folderId;
+      moveBtn.disabled = false;
+      // Update selection styling
+      folderList.querySelectorAll('.prd-stv-folder-item').forEach(item => {
+        item.classList.toggle('selected', item.dataset.folderId === folderId);
+      });
+    };
+    
+    const selectByIndex = (index) => {
+      selectedIndex = index;
+      const items = folderList.querySelectorAll('.prd-stv-folder-item');
+      items.forEach((item, i) => {
+        item.classList.toggle('selected', i === index);
+      });
+      
+      if (index >= 0 && index < items.length) {
+        const selectedItem = items[index];
+        selectedFolderId = selectedItem.dataset.folderId;
+        moveBtn.disabled = false;
+        
+        // Scroll item into view
+        selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        selectedFolderId = null;
+        moveBtn.disabled = true;
+      }
+    };
+    
+    // Add selectedIndex setter to dialog for click handling
+    dialog._selectedIndexSetter = (index) => {
+      selectedIndex = index;
+    };
+    
+    try {
+      const bookmarkTree = await chrome.runtime.sendMessage({ type: 'GET_BOOKMARK_TREE' });
+      allFolders = renderer.extractFolders(bookmarkTree, bookmark.id);
+      filteredFolders = allFolders;
+      renderer.renderFolderList(folderList, filteredFolders, updateSelection);
+    } catch (error) {
+      folderList.innerHTML = '<div style="padding:16px;text-align:center;color:#ff6666;">Failed to load folders</div>';
+    }
+    
+    // Search functionality
+    searchInput.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+      filteredFolders = allFolders.filter(folder => 
+        folder.title.toLowerCase().includes(query) || folder.path.toLowerCase().includes(query)
+      );
+      selectedIndex = -1; // Reset selection when searching
+      selectedFolderId = null;
+      moveBtn.disabled = true;
+      renderer.renderFolderList(folderList, filteredFolders, updateSelection);
+    });
+    
+    // Keyboard navigation
+    searchInput.addEventListener('keydown', (e) => {
+      const items = folderList.querySelectorAll('.prd-stv-folder-item');
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        selectByIndex(selectedIndex);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        selectedIndex = Math.max(selectedIndex - 1, -1);
+        selectByIndex(selectedIndex);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedFolderId) {
+          // Trigger move action
+          moveBtn.click();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        overlay.remove();
+      }
+    });
+    
+    // Move button
+    moveBtn.addEventListener('click', async () => {
+      if (selectedFolderId) {
+        try {
+          if (bookmark._isTab) {
+            // Handle tab -> bookmark creation
+            const bookmarkData = {
+              parentId: selectedFolderId,
+              title: bookmark.title || 'Untitled',
+              url: bookmark.url
+            };
+            
+            await chrome.runtime.sendMessage({
+              type: 'CREATE_BOOKMARK',
+              bookmarkData: bookmarkData
+            });
+            window.utils.showToast('Tab saved as bookmark');
+          } else {
+            // Handle normal bookmark move
+            await chrome.runtime.sendMessage({
+              type: 'MOVE_BOOKMARK',
+              bookmarkId: bookmark.id,
+              destinationId: selectedFolderId
+            });
+            window.utils.showToast('Bookmark moved');
+          }
+          overlay.remove();
+          // Reload bookmarks to reflect changes
+          await window.reloadBookmarks();
+          window.renderer.render(window.state, window.elements);
+        } catch (error) {
+          console.error('Failed to move bookmark:', error);
+          window.utils.showToast('Failed to move bookmark');
+        }
+      }
+    });
+    
+    // Cancel button and overlay click
+    cancelBtn.addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+  },
+
+  extractFolders: (bookmarkTree, excludeId = null) => {
+    const folders = [];
+    
+    const traverse = (nodes, path = '') => {
+      if (!nodes) return;
+      
+      nodes.forEach(node => {
+        if (!node.url && node.id !== excludeId) { // It's a folder and not the bookmark being moved
+          const currentPath = path ? `${path} > ${node.title}` : node.title;
+          folders.push({
+            id: node.id,
+            title: node.title,
+            path: currentPath
+          });
+          
+          if (node.children) {
+            traverse(node.children, currentPath);
+          }
+        }
+      });
+    };
+    
+    traverse(bookmarkTree);
+    return folders;
+  },
+
+  renderFolderList: (container, folders, onSelect) => {
+    container.innerHTML = folders.map((folder, index) => `
+      <div class="prd-stv-folder-item" data-folder-id="${folder.id}" data-index="${index}"
+        style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #3a3a3a;display:flex;flex-direction:column;">
+        <div style="font-size:14px;color:#f5f5f5;">${window.utils.escapeHtml(folder.title)}</div>
+        <div style="font-size:12px;color:#999;margin-top:2px;">${window.utils.escapeHtml(folder.path)}</div>
+      </div>
+    `).join('') || '<div style="padding:16px;text-align:center;color:#999;">No folders found</div>';
+    
+    container.addEventListener('click', (e) => {
+      const folderItem = e.target.closest('.prd-stv-folder-item');
+      if (folderItem && folderItem.dataset.folderId) {
+        // Update the selectedIndex when clicking
+        const clickedIndex = parseInt(folderItem.dataset.index);
+        if (!isNaN(clickedIndex)) {
+          // Find the dialog to update its selectedIndex
+          const dialog = folderItem.closest('.prd-stv-move-dialog');
+          if (dialog && dialog._selectedIndexSetter) {
+            dialog._selectedIndexSetter(clickedIndex);
+          }
+        }
+        onSelect(folderItem.dataset.folderId);
+      }
+    });
+  },
+
+
 };
 
 // Export for use in other modules

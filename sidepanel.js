@@ -85,6 +85,21 @@
     }
   }
 
+  async function duplicateTab(tab) {
+    try {
+      await chrome.tabs.create({ 
+        url: tab.url,
+        windowId: tab.windowId,
+        index: tab.index + 1
+      });
+      await reloadTabs();
+      window.renderer.render(state, elements);
+      window.utils.showToast('Tab duplicated');
+    } catch {
+      window.utils.showToast('Failed to duplicate tab');
+    }
+  }
+
   async function deleteBookmark(bookmarkId) {
     try {
       await chrome.bookmarks.remove(bookmarkId);
@@ -177,6 +192,7 @@
   window.activateTab = activateTab;
   window.closeTab = closeTab;
   window.closeTabFromBookmark = closeTabFromBookmark;
+  window.duplicateTab = duplicateTab;
   window.deleteBookmark = deleteBookmark;
   window.openUrl = openUrl;
   window.reloadBookmarks = reloadBookmarks;
