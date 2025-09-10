@@ -227,3 +227,20 @@
   background: #555 !important;
   color: #fff !important;
 }
+
+/* Folder header hover effects */
+.bm-folder-header {
+  display: flex !important;
+  align-items: center !important;
+  padding: 8px !important;
+  border-radius: 4px !important;
+  transition: background 0.2s ease !important;
+}
+
+.bm-folder-header:hover {
+  background: #353535 !important;
+}
+
+.bm-folder-header:hover .prd-stv-item-controls {
+  opacity: 1 !important;
+}
