@@ -136,6 +136,20 @@
   async function openUrl(url, mouseEvent, bookmarkId = null) {
     if (!url) return;
     try {
+      // If this is a bookmark that already has an associated tab, switch to that tab
+      if (bookmarkId && state.bookmarkTabRelationships[bookmarkId]) {
+        const existingTabId = state.bookmarkTabRelationships[bookmarkId];
+        const existingTab = state.tabs.find(tab => tab.id === existingTabId);
+        
+        if (existingTab) {
+          // Switch to the existing tab
+          await activateTab(existingTab);
+          return;
+        } else {
+          // Tab no longer exists, remove the relationship
+          delete state.bookmarkTabRelationships[bookmarkId];
+        }
+      }
       
       let targetTab;
       if (mouseEvent && (mouseEvent.ctrlKey || mouseEvent.metaKey)) {
