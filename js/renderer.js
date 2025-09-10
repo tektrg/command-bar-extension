@@ -68,13 +68,23 @@ const renderer = {
     header.dataset.id = node.id;
     header.setAttribute('draggable', 'true');
     header.innerHTML = `
-      <span class="bm-twisty">${window.folderState.isExpanded(node.id, state) ? '▾' : '▸'}</span>
-      <span>${window.utils.escapeHtml(node.title || 'Untitled folder')}</span>
+      <div style="display:flex;flex:1;align-items:center;min-width:0;">
+        <span class="bm-twisty">${window.folderState.isExpanded(node.id, state) ? '▾' : '▸'}</span>
+        <span style="flex:1;">${window.utils.escapeHtml(node.title || 'Untitled folder')}</span>
+      </div>
+      <div class="prd-stv-item-controls" style="opacity:0;transition:opacity 0.2s;">
+        <button class="prd-stv-menu-btn" title="More options" data-folder-id="${node.id}">⋯</button>
+      </div>
     `;
     
     header.addEventListener('click', (e) => {
       if (e.defaultPrevented) return;
-      window.folderState.toggle(node.id, state, window.storage, window.renderer);
+      if (e.target.classList.contains('prd-stv-menu-btn')) {
+        e.stopPropagation();
+        renderer.showFolderContextMenu(e, node);
+      } else {
+        window.folderState.toggle(node.id, state, window.storage, window.renderer);
+      }
     });
     
     // Add drag and drop handlers
@@ -381,6 +391,49 @@ const renderer = {
     }
   },
 
+  showFolderContextMenu: (event, folder) => {
+    // Remove any existing context menu
+    renderer.closeContextMenu();
+    
+    // Create context menu for folders
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'prd-stv-context-menu';
+    contextMenu.innerHTML = `
+      <div class="prd-stv-context-item" data-action="rename">
+        <span>Rename</span>
+      </div>
+      <div class="prd-stv-context-item" data-action="move">
+        <span>Move to...</span>
+      </div>
+    `;
+    
+    // Position the menu relative to the clicked button
+    const buttonRect = event.target.getBoundingClientRect();
+    contextMenu.style.position = 'fixed';
+    contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
+    contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
+    contextMenu.style.zIndex = '10000';
+    
+    // Add to document
+    document.body.appendChild(contextMenu);
+    
+    // Handle menu item clicks
+    contextMenu.addEventListener('click', (e) => {
+      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+      if (action === 'rename') {
+        renderer.startFolderRename(folder);
+      } else if (action === 'move') {
+        renderer.showMoveDialog(folder);
+      }
+      renderer.closeContextMenu();
+    });
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+      document.addEventListener('click', renderer.closeContextMenu, { once: true });
+    }, 10);
+  },
+
   showTabContextMenu: (event, tab, itemElement) => {
     // Remove any existing context menu
     renderer.closeContextMenu();
@@ -453,11 +506,16 @@ const renderer = {
       const newTitle = input.value.trim();
       if (save && newTitle && newTitle !== currentTitle) {
         try {
-          await chrome.runtime.sendMessage({
+          const response = await chrome.runtime.sendMessage({
             type: 'RENAME_BOOKMARK',
             bookmarkId: bookmark.id,
             newTitle: newTitle
           });
+          
+          if (response && response.success === false) {
+            throw new Error(response.error || 'Rename operation failed');
+          }
+          
           bookmark.title = newTitle; // Update local state
           window.utils.showToast('Bookmark renamed');
         } catch (error) {
@@ -468,6 +526,65 @@ const renderer = {
       
       // Restore original title display
       titleElement.innerHTML = window.utils.highlightMatches(bookmark.title || bookmark.url, window.state?.query || '');
+    };
+    
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finishRename(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        finishRename(false);
+      }
+    });
+    
+    input.addEventListener('blur', () => finishRename(true));
+  },
+
+  startFolderRename: (folder) => {
+    const folderHeader = document.querySelector(`.bm-folder-header[data-id="${folder.id}"]`);
+    if (!folderHeader) return;
+    
+    const titleElement = folderHeader.querySelector('span:last-child');
+    const currentTitle = folder.title;
+    
+    // Create input element
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentTitle;
+    input.className = 'prd-stv-rename-input';
+    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:2px;font-size:14px;outline:none;width:100%;';
+    
+    // Replace title with input
+    titleElement.innerHTML = '';
+    titleElement.appendChild(input);
+    input.focus();
+    input.select();
+    
+    const finishRename = async (save = false) => {
+      const newTitle = input.value.trim();
+      if (save && newTitle && newTitle !== currentTitle) {
+        try {
+          const response = await chrome.runtime.sendMessage({
+            type: 'RENAME_BOOKMARK',
+            bookmarkId: folder.id,
+            newTitle: newTitle
+          });
+          
+          if (response && response.success === false) {
+            throw new Error(response.error || 'Rename operation failed');
+          }
+          
+          folder.title = newTitle; // Update local state
+          window.utils.showToast('Folder renamed');
+        } catch (error) {
+          console.error('Failed to rename folder:', error);
+          window.utils.showToast('Failed to rename folder');
+        }
+      }
+      
+      // Restore original title display
+      titleElement.textContent = folder.title || 'Untitled folder';
     };
     
     input.addEventListener('keydown', (e) => {
@@ -499,8 +616,10 @@ const renderer = {
     dialog.style.cssText = 'background:#2b2b2b;border-radius:8px;padding:20px;width:400px;max-width:90%;max-height:80%;color:#f5f5f5;';
     
     const isTab = bookmark._isTab;
+    const isFolder = !bookmark.url && !bookmark._isTab; // Folder if no URL and not a tab
     const actionText = isTab ? 'Save' : 'Move';
-    const titleText = isTab ? `Save "${bookmark.title}" as bookmark` : `Move "${bookmark.title}" to folder`;
+    const itemType = isFolder ? 'folder' : (isTab ? 'bookmark' : 'bookmark');
+    const titleText = isTab ? `Save "${bookmark.title}" as bookmark` : `Move "${bookmark.title}" to ${itemType === 'folder' ? 'parent folder' : 'folder'}`;
     
     dialog.innerHTML = `
       <h3 style="margin:0 0 16px 0;font-size:16px;">${titleText}</h3>
@@ -573,7 +692,14 @@ const renderer = {
     };
     
     try {
-      const bookmarkTree = await chrome.runtime.sendMessage({ type: 'GET_BOOKMARK_TREE' });
+      const response = await chrome.runtime.sendMessage({ type: 'GET_BOOKMARK_TREE' });
+      
+      if (response && response.success === false) {
+        throw new Error(response.error || 'Failed to get bookmark tree');
+      }
+      
+      // GET_BOOKMARK_TREE returns tree directly on success, or {success: false, error} on failure
+      const bookmarkTree = response;
       allFolders = renderer.extractFolders(bookmarkTree, bookmark.id);
       filteredFolders = allFolders;
       renderer.renderFolderList(folderList, filteredFolders, updateSelection);
@@ -629,27 +755,39 @@ const renderer = {
               url: bookmark.url
             };
             
-            await chrome.runtime.sendMessage({
+            const response = await chrome.runtime.sendMessage({
               type: 'CREATE_BOOKMARK',
               bookmarkData: bookmarkData
             });
+            
+            if (response && response.success === false) {
+              throw new Error(response.error || 'Create bookmark operation failed');
+            }
+            
             window.utils.showToast('Tab saved as bookmark');
           } else {
-            // Handle normal bookmark move
-            await chrome.runtime.sendMessage({
+            // Handle normal bookmark/folder move
+            const isFolder = !bookmark.url && !bookmark._isTab; // Folder if no URL and not a tab
+            const itemType = isFolder ? 'folder' : 'bookmark';
+            const response = await chrome.runtime.sendMessage({
               type: 'MOVE_BOOKMARK',
               bookmarkId: bookmark.id,
               destinationId: selectedFolderId
             });
-            window.utils.showToast('Bookmark moved');
+            
+            if (response && response.success === false) {
+              throw new Error(response.error || 'Move operation failed');
+            }
+            
+            window.utils.showToast(`${itemType.charAt(0).toUpperCase() + itemType.slice(1)} moved`);
           }
           overlay.remove();
           // Reload bookmarks to reflect changes
           await window.reloadBookmarks();
           window.renderer.render(window.state, window.elements);
         } catch (error) {
-          console.error('Failed to move bookmark:', error);
-          window.utils.showToast('Failed to move bookmark');
+          console.error('Failed to move item:', error);
+          window.utils.showToast('Failed to move item');
         }
       }
     });
