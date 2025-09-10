@@ -163,7 +163,6 @@ const renderer = {
       <div style="display:flex;flex:1;align-items:center;min-width:0;">
         <img class="prd-stv-favicon" src="${favicon}" onerror="this.src='${window.CONSTANTS.ICONS.FALLBACK}'" />
         <span class="prd-stv-title">${window.utils.highlightMatches(tab.title || tab.url || '', state.query)}</span>
-        ${tab.active ? '<span class="active-indicator">●</span>' : ''}
       </div>
       <div class="prd-stv-item-controls">
         <button class="prd-stv-menu-btn" title="More options" data-tab-id="${tab.id}">⋯</button>
@@ -399,6 +398,9 @@ const renderer = {
     const contextMenu = document.createElement('div');
     contextMenu.className = 'prd-stv-context-menu';
     contextMenu.innerHTML = `
+      <div class="prd-stv-context-item" data-action="save-tab-here">
+        <span>Save tab here</span>
+      </div>
       <div class="prd-stv-context-item" data-action="rename">
         <span>Rename</span>
       </div>
@@ -420,7 +422,9 @@ const renderer = {
     // Handle menu item clicks
     contextMenu.addEventListener('click', (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-      if (action === 'rename') {
+      if (action === 'save-tab-here') {
+        window.saveActiveTabToFolder(folder.id);
+      } else if (action === 'rename') {
         renderer.startFolderRename(folder);
       } else if (action === 'move') {
         renderer.showMoveDialog(folder);
