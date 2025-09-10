@@ -784,7 +784,7 @@ const renderer = {
           overlay.remove();
           // Reload bookmarks to reflect changes
           await window.reloadBookmarks();
-          window.renderer.render(window.state, window.elements);
+          window.renderer.render(window.state, window['elements']);
         } catch (error) {
           console.error('Failed to move item:', error);
           window.utils.showToast('Failed to move item');
