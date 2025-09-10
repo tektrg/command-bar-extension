@@ -111,9 +111,32 @@
     }
   }
 
+  async function saveActiveTabToFolder(folderId) {
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab || !activeTab.url || activeTab.url.startsWith('chrome://')) {
+        window.utils.showToast('Cannot save this tab');
+        return;
+      }
+
+      await chrome.bookmarks.create({
+        parentId: folderId,
+        title: activeTab.title || 'Untitled',
+        url: activeTab.url
+      });
+
+      await reloadBookmarks();
+      window.renderer.render(state, elements);
+      window.utils.showToast('Tab saved to folder');
+    } catch {
+      window.utils.showToast('Failed to save tab');
+    }
+  }
+
   async function openUrl(url, mouseEvent, bookmarkId = null) {
     if (!url) return;
     try {
+      
       let targetTab;
       if (mouseEvent && (mouseEvent.ctrlKey || mouseEvent.metaKey)) {
         // Open in current tab
@@ -194,6 +217,7 @@
   window.closeTabFromBookmark = closeTabFromBookmark;
   window.duplicateTab = duplicateTab;
   window.deleteBookmark = deleteBookmark;
+  window.saveActiveTabToFolder = saveActiveTabToFolder;
   window.openUrl = openUrl;
   window.reloadBookmarks = reloadBookmarks;
   window.elements = elements;
