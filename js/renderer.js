@@ -5,6 +5,114 @@ const renderer = {
     renderer.renderCombined(state, elements);
   },
 
+  // Selective DOM update functions
+  updateBookmarkItemInDOM: (bookmarkId, bookmark, state, elements) => {
+    const existingElement = elements.combined.querySelector(`[data-id="${bookmarkId}"]`);
+    if (existingElement && bookmark) {
+      // Update existing element in place
+      const newElement = renderer.renderBookmarkItem(bookmark, state);
+      existingElement.replaceWith(newElement);
+    } else if (!bookmark && existingElement) {
+      // Remove deleted item
+      existingElement.remove();
+    } else if (bookmark && !existingElement) {
+      // Add new item (need to find correct insertion point)
+      renderer.insertBookmarkAtCorrectPosition(bookmark, state, elements);
+    }
+  },
+
+  updateTabItemInDOM: (tabId, tab, state, elements) => {
+    const existingElement = elements.combined.querySelector(`[data-id="${tabId}"]`);
+    if (existingElement && tab) {
+      const newElement = renderer.renderTabItem(tab, state);
+      existingElement.replaceWith(newElement);
+    } else if (!tab && existingElement) {
+      existingElement.remove();
+    } else if (tab && !existingElement) {
+      renderer.insertTabAtCorrectPosition(tab, state, elements);
+    }
+  },
+
+  insertBookmarkAtCorrectPosition: async (bookmark, state, elements) => {
+    try {
+      // Find parent folder in DOM
+      const parentContainer = renderer.findParentContainer(bookmark.parentId, elements);
+      if (!parentContainer) return;
+      
+      // Get siblings from Chrome API to determine position
+      const siblings = await chrome.bookmarks.getChildren(bookmark.parentId);
+      const index = siblings.findIndex(s => s.id === bookmark.id);
+      const referenceElement = parentContainer.children[index];
+      const newElement = renderer.renderBookmarkItem(bookmark, state);
+      
+      if (referenceElement) {
+        referenceElement.before(newElement);
+      } else {
+        parentContainer.appendChild(newElement);
+      }
+    } catch {
+      // Fallback to full render if positioning fails
+      renderer.render(state, elements);
+    }
+  },
+
+  insertTabAtCorrectPosition: (tab, state, elements) => {
+    // For tabs, we can insert based on the current tab order in state.tabs
+    const tabList = state.filteredTabs.length || state.query ? state.filteredTabs : state.tabs;
+    const tabIndex = tabList.findIndex(t => t.id === tab.id);
+    
+    // Find the tabs section in the DOM
+    const tabHeaders = elements.combined.querySelectorAll('.prd-stv-window-separator');
+    let tabSection = null;
+    for (const header of tabHeaders) {
+      if (header.textContent.includes('Open Tabs')) {
+        tabSection = header;
+        break;
+      }
+    }
+    
+    if (!tabSection) return;
+    
+    // Find the correct position to insert
+    const newElement = renderer.renderTabItem(tab, state);
+    let insertBefore = null;
+    let current = tabSection.nextElementSibling;
+    let currentIndex = 0;
+    
+    while (current && currentIndex < tabIndex) {
+      if (current.dataset.id && tabList[currentIndex] && current.dataset.id === String(tabList[currentIndex].id)) {
+        currentIndex++;
+      }
+      if (currentIndex === tabIndex) {
+        insertBefore = current;
+        break;
+      }
+      current = current.nextElementSibling;
+    }
+    
+    if (insertBefore) {
+      insertBefore.before(newElement);
+    } else {
+      // Insert after the last tab or after tab section header
+      let lastTab = tabSection;
+      let sibling = tabSection.nextElementSibling;
+      while (sibling && sibling.dataset.id) {
+        lastTab = sibling;
+        sibling = sibling.nextElementSibling;
+      }
+      lastTab.after(newElement);
+    }
+  },
+
+  findParentContainer: (parentId, elements) => {
+    // Find the parent folder container
+    const parentFolder = elements.combined.querySelector(`[data-id="${parentId}"]`);
+    if (!parentFolder) return null;
+    
+    // Find the children container within the parent folder
+    return parentFolder.querySelector('.bm-children');
+  },
+
   renderCombined: (state, elements) => {
     elements.combined.innerHTML = '';
     
