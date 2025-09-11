@@ -21,6 +21,12 @@
       draggedItem: null,
       draggedType: null,
     },
+    // Item tracking maps for selective updates
+    itemMaps: {
+      bookmarks: new Map(), // id -> bookmark object
+      tabs: new Map(),      // id -> tab object
+      history: new Map()    // url -> history object (history uses URL as key)
+    }
   };
 
   // Bookmark-tab relationship management
@@ -45,6 +51,103 @@
       }
     }
     return null;
+  }
+
+  // Selective data update functions
+  async function updateSingleBookmark(bookmarkId) {
+    try {
+      const [bookmark] = await chrome.bookmarks.get(bookmarkId).catch(() => []);
+      if (bookmark) {
+        state.itemMaps.bookmarks.set(bookmarkId, bookmark);
+        return bookmark;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function updateSingleTab(tabId) {
+    try {
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      if (tab) {
+        state.itemMaps.tabs.set(tabId, tab);
+        return tab;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  function removeSingleItem(type, id) {
+    state.itemMaps[type].delete(id);
+  }
+
+  // Incremental filter update functions
+  function addItemToFilteredResults(item, type) {
+    const query = state.query.toLowerCase();
+    if (!query) return;
+    
+    if (type === 'bookmark' && window.bookmarks.nodeMatches && window.bookmarks.nodeMatches(item, query)) {
+      // Add to filtered tree maintaining structure
+      addToFilteredTree(item);
+    } else if (type === 'tab') {
+      const hay = ((item.title || '') + ' ' + (item.url || '')).toLowerCase();
+      if (hay.includes(query)) {
+        state.filteredTabs.push(item);
+      }
+    }
+  }
+
+  function removeItemFromFilteredResults(itemId, type) {
+    if (!state.query) return;
+    
+    if (type === 'bookmark') {
+      removeFromFilteredTree(itemId);
+    } else if (type === 'tab') {
+      state.filteredTabs = state.filteredTabs.filter(t => t.id !== itemId);
+    }
+  }
+
+  function addToFilteredTree(bookmark) {
+    // This is a simplified implementation - in a full implementation,
+    // you would need to reconstruct the tree structure while maintaining parent-child relationships
+    if (!state.filteredTree.some(root => containsBookmark(root, bookmark.id))) {
+      // For now, we'll trigger a full filter re-application
+      // A full implementation would maintain the tree structure incrementally
+      applyBookmarkFilter();
+    }
+  }
+
+  function removeFromFilteredTree(bookmarkId) {
+    // Remove from filtered tree
+    state.filteredTree = state.filteredTree.map(root => removeBookmarkFromTree(root, bookmarkId)).filter(Boolean);
+  }
+
+  function containsBookmark(node, bookmarkId) {
+    if (node.id === bookmarkId) return true;
+    if (node.children) {
+      return node.children.some(child => containsBookmark(child, bookmarkId));
+    }
+    return false;
+  }
+
+  function removeBookmarkFromTree(node, bookmarkId) {
+    if (node.id === bookmarkId) return null;
+    
+    if (node.children) {
+      node.children = node.children.map(child => removeBookmarkFromTree(child, bookmarkId)).filter(Boolean);
+      // If folder has no children after removal and doesn't match query itself, remove it
+      if (node.children.length === 0 && !node.url) {
+        const query = state.query.toLowerCase();
+        if (!node.title || !node.title.toLowerCase().includes(query)) {
+          return null;
+        }
+      }
+    }
+    
+    return node;
   }
 
   // Tab and bookmark operations
@@ -191,6 +294,20 @@
   async function reloadBookmarks() {
     const roots = await chrome.bookmarks.getTree();
     state.bookmarksRoots = roots && roots[0] && roots[0].children ? roots[0].children : roots;
+    
+    // Populate bookmarks itemMap
+    state.itemMaps.bookmarks.clear();
+    function populateBookmarkMap(nodes) {
+      if (!nodes) return;
+      nodes.forEach(node => {
+        state.itemMaps.bookmarks.set(node.id, node);
+        if (node.children) {
+          populateBookmarkMap(node.children);
+        }
+      });
+    }
+    populateBookmarkMap(state.bookmarksRoots);
+    
     applyBookmarkFilter();
   }
 
@@ -219,6 +336,13 @@
     });
     
     state.tabs = filtered;
+    
+    // Populate tabs itemMap
+    state.itemMaps.tabs.clear();
+    filtered.forEach(tab => {
+      state.itemMaps.tabs.set(tab.id, tab);
+    });
+    
     applyTabFilter();
   }
 
@@ -268,56 +392,112 @@
 
     elements.input.addEventListener('input', onSearch);
 
-    // Live-update UI on external changes
+    // Live-update UI on external changes with selective updates
     try {
-      chrome.bookmarks.onCreated.addListener((id, bm) => {
-        reloadBookmarks().then(() => { 
-          if (bm && bm.parentId) window.folderState.ensureExpanded(bm.parentId, state, window.storage); 
-          if (!state.dragState.isDragging) window.renderer.render(state, elements); 
-        });
+      chrome.bookmarks.onCreated.addListener(async (id, bookmark) => {
+        if (state.dragState.isDragging) return;
+        
+        state.itemMaps.bookmarks.set(id, bookmark);
+        if (bookmark.parentId) window.folderState.ensureExpanded(bookmark.parentId, state, window.storage);
+        
+        if (state.query) {
+          // Re-render filtered results
+          applyBookmarkFilter();
+          window.renderer.render(state, elements);
+        } else {
+          // Insert single item
+          await window.renderer.insertBookmarkAtCorrectPosition(bookmark, state, elements);
+        }
       });
-      chrome.bookmarks.onMoved.addListener((id, info) => {
-        reloadBookmarks().then(() => { 
-          if (info && info.parentId) window.folderState.ensureExpanded(info.parentId, state, window.storage); 
-          if (!state.dragState.isDragging) window.renderer.render(state, elements); 
-        });
+
+      chrome.bookmarks.onMoved.addListener(async (id, moveInfo) => {
+        if (state.dragState.isDragging) return;
+        
+        const bookmark = await updateSingleBookmark(id);
+        
+        // Remove from old position
+        const existingElement = elements.combined.querySelector(`[data-id="${id}"]`);
+        if (existingElement) existingElement.remove();
+        
+        // Insert at new position
+        if (bookmark) {
+          if (moveInfo.parentId) window.folderState.ensureExpanded(moveInfo.parentId, state, window.storage);
+          if (state.query) {
+            applyBookmarkFilter();
+            window.renderer.render(state, elements);
+          } else {
+            await window.renderer.insertBookmarkAtCorrectPosition(bookmark, state, elements);
+          }
+        }
       });
-      chrome.bookmarks.onChanged.addListener(() => {
-        reloadBookmarks().then(() => {
-          if (!state.dragState.isDragging) window.renderer.render(state, elements);
-        });
+
+      chrome.bookmarks.onChanged.addListener(async (id, changeInfo) => {
+        if (state.dragState.isDragging) return;
+        
+        const updatedBookmark = await updateSingleBookmark(id);
+        window.renderer.updateBookmarkItemInDOM(id, updatedBookmark, state, elements);
+        
+        // Only trigger filter/search re-application if query exists
+        if (state.query) {
+          applyBookmarkFilter();
+          window.renderer.render(state, elements);
+        }
       });
-      chrome.bookmarks.onRemoved.addListener(() => {
-        reloadBookmarks().then(() => {
-          if (!state.dragState.isDragging) window.renderer.render(state, elements);
-        });
+
+      chrome.bookmarks.onRemoved.addListener((id) => {
+        if (state.dragState.isDragging) return;
+        
+        removeSingleItem('bookmarks', id);
+        window.renderer.updateBookmarkItemInDOM(id, null, state, elements);
       });
       
-      // Listen for tab changes to update the tabs list
-      chrome.tabs.onCreated.addListener(() => {
-        reloadTabs().then(() => {
-          if (!state.dragState.isDragging) window.renderer.render(state, elements);
-        });
+      // Listen for tab changes with selective updates
+      chrome.tabs.onCreated.addListener((tab) => {
+        if (state.dragState.isDragging) return;
+        
+        state.itemMaps.tabs.set(tab.id, tab);
+        if (state.query) {
+          applyTabFilter();
+          window.renderer.render(state, elements);
+        } else {
+          // Update tabs array and insert at correct position
+          reloadTabs().then(() => {
+            window.renderer.insertTabAtCorrectPosition(tab, state, elements);
+          });
+        }
       });
+
       chrome.tabs.onRemoved.addListener((tabId) => {
+        if (state.dragState.isDragging) return;
+        
         // Clean up bookmark-tab relationship when tab is closed
         removeBookmarkTabRelationship(tabId);
-        reloadTabs().then(() => {
-          if (!state.dragState.isDragging) window.renderer.render(state, elements);
-        });
+        removeSingleItem('tabs', tabId);
+        window.renderer.updateTabItemInDOM(tabId, null, state, elements);
+        
+        // Update the tabs array to maintain consistency
+        state.tabs = state.tabs.filter(t => t.id !== tabId);
+        state.filteredTabs = state.filteredTabs.filter(t => t.id !== tabId);
       });
       
-      const debouncedTabUpdate = window.utils.debounce(() => {
-        reloadTabs().then(() => {
-          if (!state.dragState.isDragging) window.renderer.render(state, elements);
-        });
-      }, 500); // Only update tabs every 500ms
-      
-      chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+        if (state.dragState.isDragging) return;
         // Only reload on meaningful changes that affect display
-        if (changeInfo.title || changeInfo.url || changeInfo.favIconUrl) {
-          debouncedTabUpdate();
+        if (!changeInfo.title && !changeInfo.url && !changeInfo.favIconUrl) return;
+        
+        state.itemMaps.tabs.set(tabId, tab);
+        
+        // Update the tab in the tabs array
+        const tabIndex = state.tabs.findIndex(t => t.id === tabId);
+        if (tabIndex !== -1) {
+          state.tabs[tabIndex] = tab;
         }
+        
+        if (state.query) {
+          applyTabFilter();
+        }
+        
+        window.renderer.updateTabItemInDOM(tabId, tab, state, elements);
       });
     } catch {}
   });
