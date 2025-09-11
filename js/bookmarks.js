@@ -71,6 +71,23 @@ const bookmarks = {
     }
     
     return null;
+  },
+
+  nodeMatches(node, query) {
+    if (!node || !query) return false;
+    
+    const lowerQuery = query.toLowerCase();
+    
+    // Check if bookmark matches
+    if (node.url) {
+      const title = (node.title || '').toLowerCase();
+      const url = (node.url || '').toLowerCase();
+      return title.includes(lowerQuery) || url.includes(lowerQuery);
+    }
+    
+    // Check if folder name matches
+    const title = (node.title || '').toLowerCase();
+    return title.includes(lowerQuery);
   }
 };
 
