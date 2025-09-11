@@ -108,6 +108,7 @@ const renderer = {
     div.className = hasOpenTab ? 'prd-stv-cmd-item bm-bookmark bookmark-highlighted' : 'prd-stv-cmd-item bm-bookmark';
     div.dataset.id = node.id;
     div.setAttribute('draggable', 'true');
+    div.setAttribute('title', `${node.title || 'Untitled'}\n${node.url}`);
     const { ITEM_TYPES } = window.CONSTANTS;
     const favicon = window.utils.getFavicon({ type: ITEM_TYPES.BOOKMARK, url: node.url });
     const query = state.query;
@@ -156,6 +157,7 @@ const renderer = {
     div.className = className;
     div.dataset.id = String(tab.id);
     div.setAttribute('draggable', 'true');
+    div.setAttribute('title', `${tab.title || 'Untitled'}\n${tab.url}`);
     const { ITEM_TYPES } = window.CONSTANTS;
     const favicon = window.utils.getFavicon({ type: ITEM_TYPES.TAB, icon: tab.favIconUrl, url: tab.url });
     
