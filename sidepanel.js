@@ -151,6 +151,19 @@
         }
       }
       
+      // Check if there's already an open tab with this URL
+      const existingTabByUrl = state.tabs.find(tab => tab.url === url);
+      if (existingTabByUrl) {
+        // Switch to the existing tab
+        await activateTab(existingTabByUrl);
+        // Create bookmark-tab relationship if this was opened from a bookmark
+        if (bookmarkId) {
+          createBookmarkTabRelationship(bookmarkId, existingTabByUrl.id);
+          window.renderer.render(state, elements);
+        }
+        return;
+      }
+      
       let targetTab;
       if (mouseEvent && (mouseEvent.ctrlKey || mouseEvent.metaKey)) {
         // Open in current tab
