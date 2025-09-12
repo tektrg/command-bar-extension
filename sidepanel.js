@@ -327,6 +327,10 @@
     const all = await chrome.tabs.query({});
     const filtered = all.filter(t => t.url && !t.url.startsWith('chrome://'));
     
+    // Debug: log active tabs
+    const activeTabs = filtered.filter(t => t.active);
+    console.log('Active tabs found:', activeTabs.length, activeTabs.map(t => `${t.title} (${t.id})`));
+    
     // Sort tabs by windowId first, then by index to maintain proper order
     filtered.sort((a, b) => {
       if (a.windowId !== b.windowId) {
@@ -371,6 +375,7 @@
   window.saveActiveTabToFolder = saveActiveTabToFolder;
   window.openUrl = openUrl;
   window.reloadBookmarks = reloadBookmarks;
+  window.reloadTabs = reloadTabs;
   window.elements = elements;
   window.state = state;
 
@@ -483,7 +488,7 @@
       chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         if (state.dragState.isDragging) return;
         // Only reload on meaningful changes that affect display
-        if (!changeInfo.title && !changeInfo.url && !changeInfo.favIconUrl) return;
+        if (!changeInfo.title && !changeInfo.url && !changeInfo.favIconUrl && !changeInfo.active) return;
         
         state.itemMaps.tabs.set(tabId, tab);
         
@@ -498,6 +503,45 @@
         }
         
         window.renderer.updateTabItemInDOM(tabId, tab, state, elements);
+      });
+      
+      // Listen for tab activation changes - this is the primary event for active tab switching
+      chrome.tabs.onActivated.addListener(async (activeInfo) => {
+        console.log('Tab activated:', activeInfo.tabId);
+        if (state.dragState.isDragging) return;
+        
+        // Get the newly activated tab and update it
+        try {
+          const activeTab = await chrome.tabs.get(activeInfo.tabId);
+          if (activeTab) {
+            state.itemMaps.tabs.set(activeInfo.tabId, activeTab);
+            
+            // Update the tab in the tabs array
+            const tabIndex = state.tabs.findIndex(t => t.id === activeInfo.tabId);
+            if (tabIndex !== -1) {
+              state.tabs[tabIndex] = activeTab;
+            }
+            
+            // Also need to update the previously active tab to remove its active state
+            // First, mark all tabs as inactive in our state
+            state.tabs.forEach(tab => {
+              if (tab.id !== activeInfo.tabId) {
+                tab.active = false;
+                state.itemMaps.tabs.set(tab.id, tab);
+              }
+            });
+            
+            // Update the filtered tabs if there's a query
+            if (state.query) {
+              applyTabFilter();
+            }
+            
+            // Force a full re-render to update all tab highlight states
+            window.renderer.render(state, elements);
+          }
+        } catch (error) {
+          console.error('Failed to handle tab activation:', error);
+        }
       });
     } catch {}
   });

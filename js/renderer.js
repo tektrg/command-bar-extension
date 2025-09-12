@@ -259,7 +259,12 @@ const renderer = {
     const div = document.createElement('div');
     const isFromBookmark = Object.values(state.bookmarkTabRelationships).includes(tab.id);
     let className = 'prd-stv-cmd-item';
-    if (tab.active) className += ' active-tab';
+    
+    // Debug log to verify active state
+    if (tab.active) {
+      console.log('Rendering active tab:', tab.title, 'with active-tab class');
+      className += ' active-tab';
+    }
     if (isFromBookmark) className += ' tab-from-bookmark';
     
     div.className = className;
