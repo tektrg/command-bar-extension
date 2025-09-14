@@ -10,7 +10,7 @@ const bookmarks = {
     }
   },
 
-  async createIfNotDuplicate(parentId, title, url) {
+  async createIfNotDuplicate(parentId, title, url, sourceTabId = null) {
     try {
       // Check if bookmark already exists in parent folder
       const children = await chrome.bookmarks.getChildren(parentId);
@@ -18,6 +18,10 @@ const bookmarks = {
       
       if (duplicate) {
         console.log('Bookmark already exists:', url);
+        // Even if duplicate exists, try to link it to the source tab if provided
+        if (sourceTabId && window.handleNewBookmarkCreation) {
+          await window.handleNewBookmarkCreation(duplicate, sourceTabId);
+        }
         return duplicate;
       }
       
@@ -27,6 +31,11 @@ const bookmarks = {
         title,
         url
       });
+      
+      // Handle tab-bookmark linking for the newly created bookmark
+      if (sourceTabId && window.handleNewBookmarkCreation) {
+        await window.handleNewBookmarkCreation(bookmark, sourceTabId);
+      }
       
       return bookmark;
     } catch (error) {
