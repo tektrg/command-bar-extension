@@ -33,6 +33,19 @@ const storage = {
     const { STORAGE_KEYS } = window.CONSTANTS;
     const expandedArray = Array.from(state.expanded);
     return await this.save(STORAGE_KEYS.EXPANDED_FOLDERS, expandedArray);
+  },
+
+  async loadBookmarkTabLinks(state) {
+    const { STORAGE_KEYS } = window.CONSTANTS;
+    const bookmarkTabLinks = await this.load(STORAGE_KEYS.BOOKMARK_TAB_LINKS, {});
+    if (bookmarkTabLinks && typeof bookmarkTabLinks === 'object') {
+      state.bookmarkTabRelationships = bookmarkTabLinks;
+    }
+  },
+
+  async saveBookmarkTabLinks(state) {
+    const { STORAGE_KEYS } = window.CONSTANTS;
+    return await this.save(STORAGE_KEYS.BOOKMARK_TAB_LINKS, state.bookmarkTabRelationships);
   }
 };
 

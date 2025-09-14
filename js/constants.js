@@ -6,7 +6,8 @@ const ICONS = {
 };
 
 const STORAGE_KEYS = {
-  EXPANDED_FOLDERS: 'expandedFolders'
+  EXPANDED_FOLDERS: 'expandedFolders',
+  BOOKMARK_TAB_LINKS: 'bookmarkTabLinks'
 };
 
 const ITEM_TYPES = {
