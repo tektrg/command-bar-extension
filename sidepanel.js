@@ -30,11 +30,12 @@
   };
 
   // Bookmark-tab relationship management
-  function createBookmarkTabRelationship(bookmarkId, tabId) {
+  async function createBookmarkTabRelationship(bookmarkId, tabId) {
     state.bookmarkTabRelationships[bookmarkId] = tabId;
+    await window.storage.saveBookmarkTabLinks(state);
   }
 
-  function removeBookmarkTabRelationship(tabId) {
+  async function removeBookmarkTabRelationship(tabId) {
     // Remove relationship when tab is closed
     for (const [bookmarkId, relatedTabId] of Object.entries(state.bookmarkTabRelationships)) {
       if (relatedTabId === tabId) {
@@ -42,6 +43,7 @@
         break;
       }
     }
+    await window.storage.saveBookmarkTabLinks(state);
   }
 
   function getBookmarkForTab(tabId) {
@@ -51,6 +53,25 @@
       }
     }
     return null;
+  }
+
+  async function cleanupStaleBookmarkTabLinks() {
+    let needsCleanup = false;
+    const currentTabIds = new Set(state.tabs.map(tab => tab.id));
+    
+    // Check each bookmark-tab relationship
+    for (const [bookmarkId, tabId] of Object.entries(state.bookmarkTabRelationships)) {
+      if (!currentTabIds.has(tabId)) {
+        // Tab no longer exists, remove the relationship
+        delete state.bookmarkTabRelationships[bookmarkId];
+        needsCleanup = true;
+      }
+    }
+    
+    // Save cleaned up relationships if any were removed
+    if (needsCleanup) {
+      await window.storage.saveBookmarkTabLinks(state);
+    }
   }
 
   // Selective data update functions
@@ -163,7 +184,7 @@
   async function closeTab(tabId) {
     try {
       // Remove bookmark-tab relationship before closing
-      removeBookmarkTabRelationship(tabId);
+      await removeBookmarkTabRelationship(tabId);
       await chrome.tabs.remove(tabId);
       await reloadTabs();
       window.renderer.render(state, elements);
@@ -177,7 +198,7 @@
     try {
       const tabId = state.bookmarkTabRelationships[bookmarkId];
       if (tabId) {
-        removeBookmarkTabRelationship(tabId);
+        await removeBookmarkTabRelationship(tabId);
         await chrome.tabs.remove(tabId);
         await reloadTabs();
         window.renderer.render(state, elements);
@@ -222,17 +243,48 @@
         return;
       }
 
-      await chrome.bookmarks.create({
+      const bookmark = await chrome.bookmarks.create({
         parentId: folderId,
         title: activeTab.title || 'Untitled',
         url: activeTab.url
       });
+
+      // Create the tab-bookmark relationship for the active tab
+      await handleNewBookmarkCreation(bookmark, activeTab.id);
 
       await reloadBookmarks();
       window.renderer.render(state, elements);
       window.utils.showToast('Tab saved to folder');
     } catch {
       window.utils.showToast('Failed to save tab');
+    }
+  }
+
+  async function handleNewBookmarkCreation(bookmark, sourceTabId = null) {
+    try {
+      // If a specific source tab is provided, create the relationship
+      if (sourceTabId && bookmark.id) {
+        // Verify the tab still exists and is open
+        const tab = state.tabs.find(t => t.id === sourceTabId);
+        if (tab) {
+          await createBookmarkTabRelationship(bookmark.id, sourceTabId);
+          // Update UI to show the highlighted bookmark
+          window.renderer.render(state, elements);
+        }
+        return;
+      }
+
+      // If no source tab specified, check if the bookmark URL matches any open tab
+      if (bookmark.url) {
+        const matchingTab = state.tabs.find(tab => tab.url === bookmark.url);
+        if (matchingTab) {
+          await createBookmarkTabRelationship(bookmark.id, matchingTab.id);
+          // Update UI to show the highlighted bookmark
+          window.renderer.render(state, elements);
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to handle new bookmark creation:', error);
     }
   }
 
@@ -249,22 +301,10 @@
           await activateTab(existingTab);
           return;
         } else {
-          // Tab no longer exists, remove the relationship
+          // Tab no longer exists, remove the relationship and save to persistent storage
           delete state.bookmarkTabRelationships[bookmarkId];
+          await window.storage.saveBookmarkTabLinks(state);
         }
-      }
-      
-      // Check if there's already an open tab with this URL
-      const existingTabByUrl = state.tabs.find(tab => tab.url === url);
-      if (existingTabByUrl) {
-        // Switch to the existing tab
-        await activateTab(existingTabByUrl);
-        // Create bookmark-tab relationship if this was opened from a bookmark
-        if (bookmarkId) {
-          createBookmarkTabRelationship(bookmarkId, existingTabByUrl.id);
-          window.renderer.render(state, elements);
-        }
-        return;
       }
       
       let targetTab;
@@ -277,13 +317,13 @@
           targetTab = await chrome.tabs.create({ url });
         }
       } else {
-        // Open in new tab
+        // Always open bookmarks in new tabs (removed URL-based matching logic)
         targetTab = await chrome.tabs.create({ url });
       }
       
       // Create bookmark-tab relationship if this was opened from a bookmark
       if (bookmarkId && targetTab && targetTab.id) {
-        createBookmarkTabRelationship(bookmarkId, targetTab.id);
+        await createBookmarkTabRelationship(bookmarkId, targetTab.id);
         // Re-render to show the updated relationship
         window.renderer.render(state, elements);
       }
@@ -373,6 +413,7 @@
   window.duplicateTab = duplicateTab;
   window.deleteBookmark = deleteBookmark;
   window.saveActiveTabToFolder = saveActiveTabToFolder;
+  window.handleNewBookmarkCreation = handleNewBookmarkCreation;
   window.openUrl = openUrl;
   window.reloadBookmarks = reloadBookmarks;
   window.reloadTabs = reloadTabs;
@@ -390,9 +431,13 @@
     
     await Promise.all([
       window.storage.loadExpandedFolders(state),
+      window.storage.loadBookmarkTabLinks(state),
       reloadBookmarks(), 
       reloadTabs()
     ]);
+    
+    // Clean up any stale bookmark-tab relationships (tabs that no longer exist)
+    await cleanupStaleBookmarkTabLinks();
     window.renderer.render(state, elements);
 
     elements.input.addEventListener('input', onSearch);
@@ -404,6 +449,9 @@
         
         state.itemMaps.bookmarks.set(id, bookmark);
         if (bookmark.parentId) window.folderState.ensureExpanded(bookmark.parentId, state, window.storage);
+        
+        // Handle automatic tab-bookmark linking for new bookmarks
+        await handleNewBookmarkCreation(bookmark);
         
         if (state.query) {
           // Re-render filtered results
@@ -472,11 +520,11 @@
         }
       });
 
-      chrome.tabs.onRemoved.addListener((tabId) => {
+      chrome.tabs.onRemoved.addListener(async (tabId) => {
         if (state.dragState.isDragging) return;
         
         // Clean up bookmark-tab relationship when tab is closed
-        removeBookmarkTabRelationship(tabId);
+        await removeBookmarkTabRelationship(tabId);
         removeSingleItem('tabs', tabId);
         window.renderer.updateTabItemInDOM(tabId, null, state, elements);
         
