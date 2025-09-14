@@ -110,7 +110,7 @@ const dragDrop = {
     } else if (payload.type === 'tab') {
       if (!payload.url) return;
       if (window.bookmarks && window.bookmarks.createIfNotDuplicate) {
-        await window.bookmarks.createIfNotDuplicate(folderId, payload.title || payload.url, payload.url);
+        await window.bookmarks.createIfNotDuplicate(folderId, payload.title || payload.url, payload.url, payload.id);
       }
       window.utils.showToast('Bookmarked tab');
     }
