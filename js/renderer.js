@@ -212,8 +212,17 @@ const renderer = {
 
   renderBookmarkItem: (node, state) => {
     const div = document.createElement('div');
-    const hasOpenTab = state.bookmarkTabRelationships[node.id];
-    div.className = hasOpenTab ? 'prd-stv-cmd-item bm-bookmark bookmark-highlighted' : 'prd-stv-cmd-item bm-bookmark';
+    const relatedTabId = state.bookmarkTabRelationships[node.id];
+    const hasOpenTab = !!relatedTabId;
+    const relatedTab = hasOpenTab ? state.itemMaps.tabs.get(relatedTabId) : null;
+    const isRelatedTabActive = !!(relatedTab && relatedTab.active);
+
+    // Build class list: always base classes, add bookmark-highlighted if linked,
+    // and add active-tab if the linked tab is currently active
+    let className = 'prd-stv-cmd-item bm-bookmark';
+    if (hasOpenTab) className += ' bookmark-highlighted';
+    if (isRelatedTabActive) className += ' active-tab';
+    div.className = className;
     div.dataset.id = node.id;
     div.setAttribute('draggable', 'true');
     div.setAttribute('title', `${node.title || 'Untitled'}\n${node.url}`);

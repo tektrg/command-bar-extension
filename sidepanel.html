@@ -167,14 +167,19 @@
       
       /* Bookmark highlighting styles */
       .bookmark-highlighted {
-        background: #2d4a3a;
-        border-left: 3px solid #4a9e5f;
+        font-weight: bold;
+        .prd-stv-item-controls{
+          opacity: 1 !important;
+          .prd-stv-close-btn {
+            opacity: 1 !important;
+          }
+        }
       }
       .bookmark-highlighted:hover {
         background: #3a5a4a;
       }
       .bookmark-highlighted .prd-stv-title {
-        color: #a8e6a3;
+        color: #b9a079;
       }
       
       /* Tab dimming styles for bookmark-opened tabs */
@@ -196,12 +201,8 @@
       
       /* Close tab button styling for highlighted bookmarks */
       .close-tab-btn {
-        background: linear-gradient(90deg, transparent 0%, #2d4a3a 30%, #2d4a3a 100%);
         color: #ff6b6b;
         font-weight: bold;
-      }
-      .bookmark-highlighted:hover .close-tab-btn {
-        background: linear-gradient(90deg, transparent 0%, #3a5a4a 30%, #3a5a4a 100%);
       }
       .close-tab-btn:hover {
         background: #ff4444 !important;
