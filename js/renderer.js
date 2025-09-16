@@ -175,10 +175,13 @@ const renderer = {
     header.className = 'bm-folder-header';
     header.dataset.id = node.id;
     header.setAttribute('draggable', 'true');
+    const openCount = window.getOpenBookmarkCountInFolder(node.id, state);
+    const countDisplay = openCount > 0 ? ` <span style="color:#777;">(${openCount})</span>` : '';
+    
     header.innerHTML = `
       <div style="display:flex;flex:1;align-items:center;min-width:0;">
         <span class="bm-twisty">${window.folderState.isExpanded(node.id, state) ? '▾' : '▸'}</span>
-        <span style="flex:1;">${window.utils.escapeHtml(node.title || 'Untitled folder')}</span>
+        <span style="flex:1;">${window.utils.escapeHtml(node.title || 'Untitled folder')}${countDisplay}</span>
       </div>
       <div class="prd-stv-item-controls" style="opacity:0;transition:opacity 0.2s;">
         <button class="prd-stv-menu-btn" title="More options" data-folder-id="${node.id}">⋯</button>
@@ -521,10 +524,16 @@ const renderer = {
     // Create context menu for folders
     const contextMenu = document.createElement('div');
     contextMenu.className = 'prd-stv-context-menu';
+    
+    const openCount = window.getOpenBookmarkCountInFolder(folder.id, window.state);
+    const closeTabsItem = openCount > 0 ? 
+      '<div class="prd-stv-context-item" data-action="close-tabs"><span>Close tabs</span></div>' : '';
+    
     contextMenu.innerHTML = `
       <div class="prd-stv-context-item" data-action="save-tab-here">
         <span>Save tab here</span>
       </div>
+      ${closeTabsItem}
       <div class="prd-stv-context-item" data-action="rename">
         <span>Rename</span>
       </div>
@@ -548,6 +557,8 @@ const renderer = {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
       if (action === 'save-tab-here') {
         window.saveActiveTabToFolder(folder.id);
+      } else if (action === 'close-tabs') {
+        window.closeTabsInFolder(folder.id);
       } else if (action === 'rename') {
         renderer.startFolderRename(folder);
       } else if (action === 'move') {

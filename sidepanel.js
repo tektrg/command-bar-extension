@@ -307,6 +307,20 @@
         }
       }
       
+      // Check if there's already an open tab with this URL
+      const matchingTab = state.tabs.find(tab => tab.url === url);
+      if (matchingTab) {
+        // Switch to the existing tab
+        await activateTab(matchingTab);
+        
+        // If this was a bookmark click, create the relationship
+        if (bookmarkId) {
+          await createBookmarkTabRelationship(bookmarkId, matchingTab.id);
+          window.renderer.render(state, elements);
+        }
+        return;
+      }
+      
       let targetTab;
       if (mouseEvent && (mouseEvent.ctrlKey || mouseEvent.metaKey)) {
         // Open in current tab
@@ -317,7 +331,7 @@
           targetTab = await chrome.tabs.create({ url });
         }
       } else {
-        // Always open bookmarks in new tabs (removed URL-based matching logic)
+        // Create new tab
         targetTab = await chrome.tabs.create({ url });
       }
       
@@ -406,6 +420,34 @@
     window.renderer.render(state, elements);
   }, 200);
 
+  // Utility function to count open bookmarks in a folder (one level only)
+  function getOpenBookmarkCountInFolder(folderId, state) {
+    const folder = state.itemMaps.bookmarks.get(folderId);
+    if (!folder?.children) return 0;
+    
+    return folder.children.filter(child => 
+      child.url && state.bookmarkTabRelationships[child.id]
+    ).length;
+  }
+
+  // Close all tabs associated with bookmarks in a folder (one level only)
+  async function closeTabsInFolder(folderId) {
+    const folder = state.itemMaps.bookmarks.get(folderId);
+    if (!folder?.children) return;
+    
+    const bookmarksWithTabs = folder.children.filter(child => 
+      child.url && state.bookmarkTabRelationships[child.id]
+    );
+    
+    if (bookmarksWithTabs.length === 0) return;
+    
+    // Close tabs using existing function
+    const promises = bookmarksWithTabs.map(bookmark => closeTabFromBookmark(bookmark.id));
+    await Promise.all(promises);
+    
+    window.utils.showToast(`Closed ${bookmarksWithTabs.length} tabs`);
+  }
+
   // Expose necessary functions and state to global scope for other modules
   window.activateTab = activateTab;
   window.closeTab = closeTab;
@@ -417,6 +459,8 @@
   window.openUrl = openUrl;
   window.reloadBookmarks = reloadBookmarks;
   window.reloadTabs = reloadTabs;
+  window.getOpenBookmarkCountInFolder = getOpenBookmarkCountInFolder;
+  window.closeTabsInFolder = closeTabsInFolder;
   window.elements = elements;
   window.state = state;
 
