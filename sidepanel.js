@@ -15,6 +15,8 @@
     expanded: new Set(),
     tabs: [],
     filteredTabs: [],
+    inactiveTabs: [],
+    filteredInactiveTabs: [],
     bookmarkTabRelationships: {}, // bookmarkId -> tabId mapping
     dragState: {
       isDragging: false,
@@ -393,11 +395,14 @@
       return a.index - b.index;
     });
     
-    state.tabs = filtered;
+    // Categorize tabs into active and inactive using tabUtils
+    const { active, inactive } = window.tabUtils.categorizeTabsByActivity(filtered);
+    state.tabs = active;
+    state.inactiveTabs = inactive;
     
-    // Populate tabs itemMap
+    // Populate tabs itemMap for both active and inactive tabs
     state.itemMaps.tabs.clear();
-    filtered.forEach(tab => {
+    [...active, ...inactive].forEach(tab => {
       state.itemMaps.tabs.set(tab.id, tab);
     });
     
@@ -406,8 +411,19 @@
 
   function applyTabFilter() {
     const q = state.query.toLowerCase();
-    if (!q) { state.filteredTabs = []; return; }
+    if (!q) { 
+      state.filteredTabs = []; 
+      state.filteredInactiveTabs = [];
+      return; 
+    }
+    
+    // Filter both active and inactive tabs
     state.filteredTabs = state.tabs.filter(t => {
+      const hay = ((t.title || '') + ' ' + (t.url || '')).toLowerCase();
+      return hay.includes(q);
+    });
+    
+    state.filteredInactiveTabs = state.inactiveTabs.filter(t => {
       const hay = ((t.title || '') + ' ' + (t.url || '')).toLowerCase();
       return hay.includes(q);
     });
@@ -448,6 +464,30 @@
     window.utils.showToast(`Closed ${bookmarksWithTabs.length} tabs`);
   }
 
+  // Close all inactive tabs
+  async function closeAllInactiveTabs() {
+    if (state.inactiveTabs.length === 0) {
+      window.utils.showToast('No inactive tabs to close');
+      return;
+    }
+    
+    const tabCount = state.inactiveTabs.length;
+    
+    try {
+      // Close all inactive tabs using existing closeTab function
+      const promises = state.inactiveTabs.map(tab => chrome.tabs.remove(tab.id));
+      await Promise.all(promises);
+      
+      // Reload tabs to update state
+      await reloadTabs();
+      window.renderer.render(state, elements);
+      window.utils.showToast(`Closed ${tabCount} inactive tabs`);
+    } catch (error) {
+      console.error('Failed to close inactive tabs:', error);
+      window.utils.showToast('Failed to close some inactive tabs');
+    }
+  }
+
   // Expose necessary functions and state to global scope for other modules
   window.activateTab = activateTab;
   window.closeTab = closeTab;
@@ -461,6 +501,7 @@
   window.reloadTabs = reloadTabs;
   window.getOpenBookmarkCountInFolder = getOpenBookmarkCountInFolder;
   window.closeTabsInFolder = closeTabsInFolder;
+  window.closeAllInactiveTabs = closeAllInactiveTabs;
   window.elements = elements;
   window.state = state;
 
@@ -554,12 +595,14 @@
         
         state.itemMaps.tabs.set(tab.id, tab);
         if (state.query) {
-          applyTabFilter();
-          window.renderer.render(state, elements);
+          // Re-categorize and re-render when searching
+          reloadTabs().then(() => {
+            window.renderer.render(state, elements);
+          });
         } else {
           // Update tabs array and insert at correct position
           reloadTabs().then(() => {
-            window.renderer.insertTabAtCorrectPosition(tab, state, elements);
+            window.renderer.render(state, elements);
           });
         }
       });
@@ -572,9 +615,11 @@
         removeSingleItem('tabs', tabId);
         window.renderer.updateTabItemInDOM(tabId, null, state, elements);
         
-        // Update the tabs array to maintain consistency
+        // Update both active and inactive tabs arrays to maintain consistency
         state.tabs = state.tabs.filter(t => t.id !== tabId);
+        state.inactiveTabs = state.inactiveTabs.filter(t => t.id !== tabId);
         state.filteredTabs = state.filteredTabs.filter(t => t.id !== tabId);
+        state.filteredInactiveTabs = state.filteredInactiveTabs.filter(t => t.id !== tabId);
       });
       
       chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
@@ -584,17 +629,33 @@
         
         state.itemMaps.tabs.set(tabId, tab);
         
-        // Update the tab in the tabs array
-        const tabIndex = state.tabs.findIndex(t => t.id === tabId);
-        if (tabIndex !== -1) {
-          state.tabs[tabIndex] = tab;
-        }
+        // Tab might have moved between active/inactive, so re-categorize
+        const wasInActive = state.tabs.findIndex(t => t.id === tabId) !== -1;
+        const wasInInactive = state.inactiveTabs.findIndex(t => t.id === tabId) !== -1;
+        const isNowInactive = window.tabUtils.isTabInactive(tab);
         
-        if (state.query) {
-          applyTabFilter();
+        // If activity status changed, do a full reload to re-categorize
+        if ((wasInActive && isNowInactive) || (wasInInactive && !isNowInactive)) {
+          await reloadTabs();
+          window.renderer.render(state, elements);
+        } else {
+          // Update the tab in the appropriate array
+          const activeIndex = state.tabs.findIndex(t => t.id === tabId);
+          if (activeIndex !== -1) {
+            state.tabs[activeIndex] = tab;
+          }
+          
+          const inactiveIndex = state.inactiveTabs.findIndex(t => t.id === tabId);
+          if (inactiveIndex !== -1) {
+            state.inactiveTabs[inactiveIndex] = tab;
+          }
+          
+          if (state.query) {
+            applyTabFilter();
+          }
+          
+          window.renderer.updateTabItemInDOM(tabId, tab, state, elements);
         }
-        
-        window.renderer.updateTabItemInDOM(tabId, tab, state, elements);
       });
       
       // Listen for tab activation changes - this is the primary event for active tab switching
@@ -608,15 +669,20 @@
           if (activeTab) {
             state.itemMaps.tabs.set(activeInfo.tabId, activeTab);
             
-            // Update the tab in the tabs array
-            const tabIndex = state.tabs.findIndex(t => t.id === activeInfo.tabId);
-            if (tabIndex !== -1) {
-              state.tabs[tabIndex] = activeTab;
+            // Update the tab in the appropriate array (active or inactive)
+            const activeIndex = state.tabs.findIndex(t => t.id === activeInfo.tabId);
+            const inactiveIndex = state.inactiveTabs.findIndex(t => t.id === activeInfo.tabId);
+            
+            if (activeIndex !== -1) {
+              state.tabs[activeIndex] = activeTab;
+            }
+            if (inactiveIndex !== -1) {
+              state.inactiveTabs[inactiveIndex] = activeTab;
             }
             
             // Also need to update the previously active tab to remove its active state
-            // First, mark all tabs as inactive in our state
-            state.tabs.forEach(tab => {
+            // Mark all tabs as inactive in our state
+            [...state.tabs, ...state.inactiveTabs].forEach(tab => {
               if (tab.id !== activeInfo.tabId) {
                 tab.active = false;
                 state.itemMaps.tabs.set(tab.id, tab);
