@@ -527,6 +527,19 @@
 
     elements.input.addEventListener('input', onSearch);
 
+    // Listen for storage changes to sync between windows
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      if (namespace === 'local' && changes[window.CONSTANTS.STORAGE_KEYS.BOOKMARK_TAB_LINKS]) {
+        // Another window updated bookmark-tab relationships
+        const newRelationships = changes[window.CONSTANTS.STORAGE_KEYS.BOOKMARK_TAB_LINKS].newValue;
+        if (newRelationships && typeof newRelationships === 'object') {
+          state.bookmarkTabRelationships = newRelationships;
+          // Re-render to update bookmark highlighting across windows
+          window.renderer.render(state, elements);
+        }
+      }
+    });
+
     // Live-update UI on external changes with selective updates
     try {
       chrome.bookmarks.onCreated.addListener(async (id, bookmark) => {
