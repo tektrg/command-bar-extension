@@ -128,7 +128,7 @@ const renderer = {
       roots.forEach(root => elements.combined.appendChild(renderer.renderNode(root, 0, state)));
     }
     
-    // Render tabs
+    // Render active tabs
     const tabList = state.filteredTabs.length || state.query ? state.filteredTabs : state.tabs;
     if (tabList && tabList.length) {
       // Add tabs section header if there are items
@@ -154,12 +154,66 @@ const renderer = {
       });
     }
     
+    // Render inactive tabs section
+    renderer.renderInactiveTabsSection(state, elements);
+    
     // Show empty state if no items
-    if ((!roots || !roots.length) && (!tabList || !tabList.length)) {
+    if ((!roots || !roots.length) && (!tabList || !tabList.length) && (!state.inactiveTabs || !state.inactiveTabs.length)) {
       const empty = document.createElement('div');
       empty.className = 'prd-stv-empty';
       empty.textContent = 'No items found';
       elements.combined.appendChild(empty);
+    }
+  },
+
+  // Create section header with optional button
+  createSectionHeader: (title, buttonConfig = null) => {
+    const header = document.createElement('div');
+    header.className = 'prd-stv-window-separator';
+    
+    if (buttonConfig) {
+      header.innerHTML = `
+        <span>${title}</span>
+        <button class="prd-stv-section-btn" 
+                title="${buttonConfig.title}"
+                style="background:#ff4444;color:white;border:none;border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;margin-left:8px;">
+          ${buttonConfig.text}
+        </button>
+      `;
+      
+      // Add event listener properly instead of inline onclick
+      const button = header.querySelector('.prd-stv-section-btn');
+      if (button && buttonConfig.clickHandler) {
+        button.addEventListener('click', buttonConfig.clickHandler);
+      }
+    } else {
+      header.innerHTML = `<span>${title}</span>`;
+    }
+    
+    return header;
+  },
+
+  // Render inactive tabs section
+  renderInactiveTabsSection: (state, elements) => {
+    const inactiveTabList = state.filteredInactiveTabs.length || state.query ? state.filteredInactiveTabs : state.inactiveTabs;
+    
+    if (inactiveTabList && inactiveTabList.length) {
+      // Create section header with Clear button
+      const inactiveHeader = renderer.createSectionHeader(
+        `Inactive tabs (${inactiveTabList.length})`,
+        {
+          text: 'Clear',
+          title: 'Close all inactive tabs',
+          clickHandler: () => window.closeAllInactiveTabs()
+        }
+      );
+      elements.combined.appendChild(inactiveHeader);
+      
+      // Render inactive tabs (no window grouping needed)
+      inactiveTabList.forEach(tab => {
+        const tabElement = renderer.renderTabItem(tab, state, { isInactive: true });
+        elements.combined.appendChild(tabElement);
+      });
     }
   },
 
@@ -267,9 +321,10 @@ const renderer = {
     return div;
   },
 
-  renderTabItem: (tab, state) => {
+  renderTabItem: (tab, state, options = {}) => {
     const div = document.createElement('div');
     const isFromBookmark = Object.values(state.bookmarkTabRelationships).includes(tab.id);
+    const isInactive = options.isInactive || false;
     let className = 'prd-stv-cmd-item';
     
     // Debug log to verify active state
@@ -278,18 +333,30 @@ const renderer = {
       className += ' active-tab';
     }
     if (isFromBookmark) className += ' tab-from-bookmark';
+    if (isInactive) className += ' inactive-tab-item';
     
     div.className = className;
     div.dataset.id = String(tab.id);
     div.setAttribute('draggable', 'true');
-    div.setAttribute('title', `${tab.title || 'Untitled'}\n${tab.url}`);
+    
+    // Add time since last access for inactive tabs
+    const titleText = isInactive ? 
+      `${tab.title || 'Untitled'} (${window.tabUtils.formatTimeSinceAccess(tab)})\n${tab.url}` :
+      `${tab.title || 'Untitled'}\n${tab.url}`;
+    div.setAttribute('title', titleText);
+    
     const { ITEM_TYPES } = window.CONSTANTS;
     const favicon = window.utils.getFavicon({ type: ITEM_TYPES.TAB, icon: tab.favIconUrl, url: tab.url });
+    
+    // Add time info for inactive tabs
+    const timeInfo = isInactive ? 
+      `<span style="font-size:11px;color:#666;margin-left:4px;">(${window.tabUtils.formatTimeSinceAccess(tab)})</span>` : 
+      '';
     
     div.innerHTML = `
       <div style="display:flex;flex:1;align-items:center;min-width:0;">
         <img class="prd-stv-favicon" src="${favicon}" onerror="this.src='${window.CONSTANTS.ICONS.FALLBACK}'" />
-        <span class="prd-stv-title">${window.utils.highlightMatches(tab.title || tab.url || '', state.query)}</span>
+        <span class="prd-stv-title">${window.utils.highlightMatches(tab.title || tab.url || '', state.query)}${timeInfo}</span>
       </div>
       <div class="prd-stv-item-controls">
         <button class="prd-stv-menu-btn" title="More options" data-tab-id="${tab.id}">⋯</button>
