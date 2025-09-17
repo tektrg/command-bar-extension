@@ -380,6 +380,42 @@
         from { opacity: 0; transform: scale(0.9) translateY(20px); }
         to { opacity: 1; transform: scale(1) translateY(0); }
       }
+      
+      /* Inactive tabs styling */
+      .inactive-tab-item {
+        opacity: 0.7;
+        background: #222;
+      }
+      
+      .inactive-tab-item:hover {
+        opacity: 0.8;
+        background: #2a2a2a;
+      }
+      
+      .inactive-tab-item .prd-stv-title {
+        color: #999;
+      }
+      
+      .inactive-tab-item .prd-stv-favicon {
+        opacity: 0.6;
+      }
+      
+      /* Section button styling (for Clear button) */
+      .prd-stv-section-btn {
+        background: #ff4444 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 3px !important;
+        padding: 2px 8px !important;
+        font-size: 10px !important;
+        cursor: pointer !important;
+        margin-left: 8px !important;
+        transition: background-color 0.2s ease !important;
+      }
+      
+      .prd-stv-section-btn:hover {
+        background: #ff6666 !important;
+      }
     </style>
   </head>
   <body>
@@ -399,6 +435,7 @@
     <script src="js/bookmarks.js"></script>
     <script src="js/folderState.js"></script>
     <script src="js/dragDrop.js"></script>
+    <script src="js/tabUtils.js"></script>
     <script src="js/renderer.js"></script>
     
     <!-- Main application -->
