@@ -45,6 +45,8 @@ const storage = {
 
   async saveBookmarkTabLinks(state) {
     const { STORAGE_KEYS } = window.CONSTANTS;
+    // Save bookmark-tab relationships which will trigger storage.onChanged events
+    // in other sidepanel windows for cross-window synchronization
     return await this.save(STORAGE_KEYS.BOOKMARK_TAB_LINKS, state.bookmarkTabRelationships);
   }
 };
