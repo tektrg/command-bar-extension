@@ -24,10 +24,18 @@
         "mac": "Command+P"
       },
       "description": "Toggle command bar"
+    },
+    "open-extension-popup": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+P",
+        "mac": "Command+Shift+P"
+      },
+      "description": "Open extension popup"
     }
   },
   "action": {
-    "default_title": "Command Bar - Click to toggle overlay, or click extension icon with side panel open"
+    "default_title": "Command Bar",
+    "default_popup": "popup.html"
   },
   "side_panel": {
     "default_path": "sidepanel.html"
@@ -37,7 +45,12 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["link_18dp_E3E3E3.svg", "bookmark_18dp_E3E3E3.svg", "history_18dp_E3E3E3.svg"],
+      "resources": [
+        "link_18dp_E3E3E3.svg",
+        "bookmark_18dp_E3E3E3.svg",
+        "history_18dp_E3E3E3.svg",
+        "templates/ui-shell.html"
+      ],
       "matches": ["<all_urls>"]
     }
   ]

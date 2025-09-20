@@ -34,9 +34,19 @@ async function toggleCommandBar() {
   }
 }
 
+async function openExtensionPopup() {
+  try {
+    await chrome.action.openPopup();
+  } catch (error) {
+    console.error('Failed to open extension popup:', error);
+  }
+}
+
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === "toggle-command-bar") {
     await toggleCommandBar();
+  } else if (command === "open-extension-popup") {
+    await openExtensionPopup();
   }
 });
 

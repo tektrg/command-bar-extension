@@ -1,0 +1,578 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: #2b2b2b;
+  color: #f5f5f5;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+#prd-stv-sidepanel-root {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-surface="sidepanel"] {
+  width: 100%;
+  height: 100vh;
+  padding: 16px;
+}
+
+[data-surface="popup"] {
+  width: 420px;
+  padding: 12px 12px 16px;
+  gap: 12px;
+}
+
+#prd-stv-sidepanel-input {
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  font-size: 15px;
+  border: none;
+  border-radius: 6px;
+  outline: none;
+  background: #3a3a3a;
+  color: #fff;
+  margin-bottom: 16px;
+}
+
+[data-surface="popup"] #prd-stv-sidepanel-input {
+  margin-bottom: 0;
+}
+
+.prd-stv-section {
+  margin-bottom: 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+[data-surface="popup"] .prd-stv-section {
+  margin-bottom: 12px;
+}
+
+.prd-stv-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 11px;
+  color: #9b9b9b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.prd-stv-list {
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #555 #2b2b2b;
+}
+
+[data-surface="popup"] .prd-stv-list {
+  max-height: 320px;
+}
+
+.prd-stv-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.prd-stv-list::-webkit-scrollbar-track {
+  background: #2b2b2b;
+}
+
+.prd-stv-list::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 3px;
+}
+
+.prd-stv-list::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+/* Bookmarks tree */
+.bm-folder {
+  margin: 2px 0;
+}
+
+.bm-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px !important;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.bm-folder-header:hover {
+  background: #353535;
+}
+
+.bm-twisty {
+  width: 10px;
+  color: #9b9b9b;
+  font-size: 12px;
+}
+
+.bm-children {
+  margin-left: 14px;
+}
+
+.bm-folder-header.drag-over {
+  outline: 1px dashed #b9a079;
+}
+
+.bm-folder-header[draggable="true"] {
+  cursor: grab;
+}
+
+.bm-folder-header[draggable="true"]:active,
+.prd-stv-cmd-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Drop zone styling */
+.drop-zone {
+  display: block;
+  height: 0;
+  padding: 8px 0;
+  margin: -8px 0;
+  border-radius: 6px;
+  background: rgba(185, 160, 121, 0.18);
+  border: 1px dashed transparent;
+  opacity: 0;
+  transition:
+    height 0.18s ease,
+    opacity 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    margin 0.18s ease,
+    padding 0.18s ease;
+  pointer-events: none;
+}
+
+.drop-zone:after {
+  content: "Drop here";
+  position: relative;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  color: #b9a079;
+  background-color: #3a5a4a;
+  font-weight: 600;
+  pointer-events: none;
+  width: 100%;
+  height: 150%;
+  z-index: 99;
+}
+
+.drop-zone.visible {
+  pointer-events: all;
+}
+
+.drop-zone.active {
+  padding: 0;
+  margin: 4px 0;
+  opacity: 0.85;
+  border-color: #b9a079;
+  background: rgba(185, 160, 121, 0.28);
+}
+
+/* Container positioning for drop zones */
+.bm-children,
+#combined-list {
+  position: relative;
+}
+
+/* Enhanced drag feedback */
+.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+}
+
+.drag-ghost {
+  opacity: 0.35 !important;
+}
+
+.drag-preview {
+  pointer-events: none;
+}
+
+.bm-folder.dragging,
+.prd-stv-cmd-item.dragging {
+  opacity: 0.6;
+  background: #404040;
+  border: 1px dashed #666;
+}
+
+.drag-target {
+  outline: 2px solid #b9a079 !important;
+}
+
+.prd-stv-empty {
+  color: #7a7a7a;
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+/* Item typography */
+.prd-stv-cmd-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px !important;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  position: relative;
+  flex-direction: row !important;
+  align-items: center !important;
+}
+
+.prd-stv-cmd-item:hover {
+  background: #353535;
+}
+
+.prd-stv-title {
+  font-size: 14px;
+  line-height: 1.3;
+  color: #cbcbcb;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+img.prd-stv-favicon {
+  width: 16px;
+  height: 16px;
+  margin-right: 12px !important;
+  flex-shrink: 0;
+  margin-top: 0 !important;
+}
+
+/* Close button styles with gradient overlay */
+.prd-stv-close-btn {
+  opacity: 0;
+  background: linear-gradient(90deg, transparent 0%, #2b2b2b 30%, #2b2b2b 100%);
+  border: none;
+  color: #9b9b9b;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+  z-index: 2;
+  min-width: 24px;
+  text-align: center;
+}
+
+.prd-stv-cmd-item:hover .prd-stv-close-btn {
+  opacity: 1;
+  background: linear-gradient(90deg, transparent 0%, #353535 30%, #353535 100%);
+}
+
+.prd-stv-close-btn:hover {
+  background: #ff4444 !important;
+  color: white;
+}
+
+/* Side panel header */
+.prd-stv-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.prd-stv-header h1 {
+  font-size: 18px;
+  margin: 0;
+  color: #f5f5f5;
+  font-weight: 600;
+}
+
+.prd-stv-header .prd-stv-shortcuts {
+  font-size: 11px;
+  color: #9b9b9b;
+  font-family: monospace;
+}
+
+/* Active tab highlighting */
+.prd-stv-cmd-item.active-tab {
+  background: #191919;
+  border-radius: 15px !important;
+}
+
+.prd-stv-cmd-item.active-tab:hover {
+  background: #4a5a6c;
+}
+
+/* Bookmark highlighting styles */
+.bookmark-highlighted {
+  font-weight: bold;
+}
+
+.bookmark-highlighted .prd-stv-item-controls,
+.bookmark-highlighted .prd-stv-close-btn {
+  opacity: 1 !important;
+}
+
+.bookmark-highlighted:hover {
+  background: #3a5a4a;
+}
+
+.bookmark-highlighted .prd-stv-title {
+  color: #b9a079;
+}
+
+/* Tab dimming styles for bookmark-opened tabs */
+.tab-from-bookmark {
+  opacity: 0.6;
+  background: #2a2a2a;
+  pointer-events: auto;
+}
+
+.tab-from-bookmark:hover {
+  opacity: 0.7;
+  background: #323232;
+}
+
+.tab-from-bookmark .prd-stv-title {
+  color: #999;
+}
+
+.tab-from-bookmark .active-indicator {
+  color: #666;
+}
+
+/* Close tab button styling for highlighted bookmarks */
+.close-tab-btn {
+  color: #ff6b6b;
+  font-weight: bold;
+}
+
+.close-tab-btn:hover {
+  background: #ff4444 !important;
+  color: white;
+}
+
+/* Window separator */
+.prd-stv-window-separator {
+  display: flex;
+  align-items: center;
+  padding: 12px 12px 8px 12px;
+  margin: 8px 0 4px 0;
+  font-size: 11px;
+  color: #9b9b9b;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.prd-stv-window-separator:before,
+.prd-stv-window-separator:after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #404040;
+}
+
+.prd-stv-window-separator:before {
+  margin-right: 8px;
+}
+
+.prd-stv-window-separator:after {
+  margin-left: 8px;
+}
+
+/* 3-dots menu and controls styling */
+.prd-stv-item-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.prd-stv-cmd-item:hover .prd-stv-item-controls {
+  opacity: 1;
+}
+
+/* Toast */
+#prd-stv-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+/* Context menu styling */
+.prd-stv-context-menu {
+  position: fixed;
+  z-index: 10000;
+  background: #2b2b2b;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  min-width: 180px;
+  overflow: hidden;
+}
+
+.prd-stv-context-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  color: #f5f5f5;
+  font-size: 14px;
+  transition: background-color 0.15s ease;
+  display: flex;
+  align-items: center;
+}
+
+.prd-stv-context-item:hover {
+  background: #353535;
+}
+
+.prd-stv-context-item:first-child {
+  border-bottom: 1px solid #3a3a3a;
+}
+
+/* Folder item selection styling */
+.prd-stv-folder-item:hover {
+  background: #353535;
+}
+
+.prd-stv-folder-item.selected {
+  background: #b9a079 !important;
+  color: #000 !important;
+  outline: 2px solid #d4c49a;
+  outline-offset: -2px;
+}
+
+.prd-stv-folder-item.selected div {
+  color: #000 !important;
+}
+
+.prd-stv-folder-item.selected:hover {
+  background: #c7b08a !important;
+}
+
+/* Rename input styling */
+.prd-stv-rename-input {
+  background: #3a3a3a !important;
+  border: 1px solid #b9a079 !important;
+  color: #fff !important;
+  padding: 2px 4px !important;
+  border-radius: 2px !important;
+  font-size: 14px !important;
+  outline: none !important;
+  width: 100% !important;
+}
+
+.prd-stv-rename-input:focus {
+  border-color: #d4c49a !important;
+  box-shadow: 0 0 3px rgba(185, 160, 121, 0.3) !important;
+}
+
+/* Move dialog specific styles */
+.prd-stv-move-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  z-index: 20000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  animation: overlayIn 0.2s ease-out !important;
+}
+
+@keyframes overlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.prd-stv-move-dialog {
+  background: #2b2b2b !important;
+  border-radius: 8px !important;
+  padding: 20px !important;
+  width: 400px !important;
+  max-width: 90% !important;
+  max-height: 80% !important;
+  color: #f5f5f5 !important;
+  animation: dialogIn 0.2s ease-out !important;
+}
+
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Inactive tabs styling */
+.inactive-tab-item {
+  opacity: 0.7;
+  background: #222;
+}
+
+.inactive-tab-item:hover {
+  opacity: 0.8;
+  background: #2a2a2a;
+}
+
+.inactive-tab-item .prd-stv-title {
+  color: #999;
+}
+
+.inactive-tab-item .prd-stv-favicon {
+  opacity: 0.6;
+}
+
+/* Section button styling (for Clear button) */
+.prd-stv-section-btn {
+  background: #ff4444 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 3px !important;
+  padding: 2px 8px !important;
+  font-size: 10px !important;
+  cursor: pointer !important;
+  margin-left: 8px !important;
+  transition: background-color 0.2s ease !important;
+}
+
+.prd-stv-section-btn:hover {
+  background: #ff6666 !important;
+}

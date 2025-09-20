@@ -3,6 +3,9 @@
 const renderer = {
   render: (state, elements) => {
     renderer.renderCombined(state, elements);
+    if (window.dragDrop && typeof window.dragDrop.refreshSortables === 'function') {
+      window.dragDrop.refreshSortables(state, elements);
+    }
   },
 
   // Selective DOM update functions
@@ -224,6 +227,10 @@ const renderer = {
     const wrapper = document.createElement('div');
     wrapper.className = 'bm-folder';
     wrapper.dataset.id = node.id;
+    wrapper.dataset.itemType = 'folder';
+    if (typeof node.parentId !== 'undefined') {
+      wrapper.dataset.parentId = node.parentId;
+    }
 
     const header = document.createElement('div');
     header.className = 'bm-folder-header';
@@ -259,6 +266,7 @@ const renderer = {
 
     const childrenWrap = document.createElement('div');
     childrenWrap.className = 'bm-children';
+    childrenWrap.dataset.parentId = node.id;
     const shouldExpand = state.query ? true : window.folderState.isExpanded(node.id, state);
     if (shouldExpand && node.children && node.children.length) {
       node.children.forEach(child => childrenWrap.appendChild(renderer.renderNode(child, depth + 1, state)));
@@ -281,6 +289,10 @@ const renderer = {
     if (isRelatedTabActive) className += ' active-tab';
     div.className = className;
     div.dataset.id = node.id;
+    div.dataset.itemType = 'bookmark';
+    if (typeof node.parentId !== 'undefined') {
+      div.dataset.parentId = node.parentId;
+    }
     div.setAttribute('draggable', 'true');
     div.setAttribute('title', `${node.title || 'Untitled'}\n${node.url}`);
     const { ITEM_TYPES } = window.CONSTANTS;
@@ -437,49 +449,16 @@ const renderer = {
       const payload = { type: 'folder', id: node.id, parentId: node.parentId };
       e.dataTransfer.setData('text/plain', JSON.stringify(payload));
       e.dataTransfer.effectAllowed = 'move';
-      
-      // Add visual feedback
-      header.style.opacity = '0.5';
-      header.style.transform = 'rotate(2deg)';
-      
-      // Update drag state
+
       state.dragState.isDragging = true;
       state.dragState.draggedItem = payload;
       state.dragState.draggedType = 'folder';
-      
-      // Insert drop zones after a small delay to allow render
-      setTimeout(() => {
-        // Insert drop zones in current parent
-        const parentContainer = window.dragDrop.findParentContainer(node.parentId);
-        if (parentContainer) {
-          window.dragDrop.insertDropZones(parentContainer, node.parentId, state);
-        }
-        
-        // Also insert drop zones in all expanded folders for cross-folder moves
-        document.querySelectorAll('.bm-folder').forEach(folder => {
-          const folderId = folder.dataset.id;
-          if (window.folderState.isExpanded(folderId, state)) {
-            const childrenContainer = folder.querySelector('.bm-children');
-            if (childrenContainer && folderId !== node.id) { // Don't add to self
-              window.dragDrop.insertDropZones(childrenContainer, folderId, state);
-            }
-          }
-        });
-      }, 10);
     });
 
     header.addEventListener('dragend', () => {
-      // Remove visual feedback
-      header.style.opacity = '';
-      header.style.transform = '';
-      
       state.dragState.isDragging = false;
       state.dragState.draggedItem = null;
       state.dragState.draggedType = null;
-      window.dragDrop.removeAllDropZones();
-      
-      // Re-render to catch any missed updates during drag
-      window.renderer.render(state, window.elements);
     });
   },
 
@@ -488,49 +467,15 @@ const renderer = {
       const payload = { type: 'bookmark', id: node.id, parentId: node.parentId };
       e.dataTransfer.setData('text/plain', JSON.stringify(payload));
       e.dataTransfer.effectAllowed = 'move';
-      
-      // Add visual feedback
-      div.style.opacity = '0.5';
-      div.style.transform = 'rotate(2deg)';
-      
-      // Update drag state
       state.dragState.isDragging = true;
       state.dragState.draggedItem = payload;
       state.dragState.draggedType = 'bookmark';
-      
-      // Insert drop zones after a small delay to allow render
-      setTimeout(() => {
-        // Insert drop zones in current parent
-        const parentContainer = window.dragDrop.findParentContainer(node.parentId);
-        if (parentContainer) {
-          window.dragDrop.insertDropZones(parentContainer, node.parentId, state);
-        }
-        
-        // Also insert drop zones in all expanded folders for cross-folder moves
-        document.querySelectorAll('.bm-folder').forEach(folder => {
-          const folderId = folder.dataset.id;
-          if (window.folderState.isExpanded(folderId, state)) {
-            const childrenContainer = folder.querySelector('.bm-children');
-            if (childrenContainer) {
-              window.dragDrop.insertDropZones(childrenContainer, folderId, state);
-            }
-          }
-        });
-      }, 10);
     });
 
     div.addEventListener('dragend', () => {
-      // Remove visual feedback
-      div.style.opacity = '';
-      div.style.transform = '';
-      
       state.dragState.isDragging = false;
       state.dragState.draggedItem = null;
       state.dragState.draggedType = null;
-      window.dragDrop.removeAllDropZones();
-      
-      // Re-render to catch any missed updates during drag
-      window.renderer.render(state, window.elements);
     });
   },
 
