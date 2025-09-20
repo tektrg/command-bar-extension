@@ -179,7 +179,7 @@ const renderer = {
         <span>${title}</span>
         <button class="prd-stv-section-btn" 
                 title="${buttonConfig.title}"
-                style="background:#ff4444;color:white;border:none;border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;margin-left:8px;">
+                style="background:#ff4444;color:white;border:none;border-radius:15px;padding:2px 8px;font-size:10px;cursor:pointer;margin-left:8px;">
           ${buttonConfig.text}
         </button>
       `;
@@ -645,7 +645,7 @@ const renderer = {
     input.type = 'text';
     input.value = currentTitle;
     input.className = 'prd-stv-rename-input';
-    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:2px;font-size:14px;outline:none;width:100%;';
+    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:15px;font-size:14px;outline:none;width:100%;';
     
     // Replace title with input
     titleElement.innerHTML = '';
@@ -704,7 +704,7 @@ const renderer = {
     input.type = 'text';
     input.value = currentTitle;
     input.className = 'prd-stv-rename-input';
-    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:2px;font-size:14px;outline:none;width:100%;';
+    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:15px;font-size:14px;outline:none;width:100%;';
     
     // Replace title with input
     titleElement.innerHTML = '';
@@ -764,7 +764,7 @@ const renderer = {
     // Create dialog
     const dialog = document.createElement('div');
     dialog.className = 'prd-stv-move-dialog';
-    dialog.style.cssText = 'background:#2b2b2b;border-radius:8px;padding:20px;width:400px;max-width:90%;max-height:80%;color:#f5f5f5;';
+    dialog.style.cssText = 'background:#2b2b2b;border-radius:15px;padding:20px;width:400px;max-width:90%;max-height:80%;color:#f5f5f5;';
     
     const isTab = bookmark._isTab;
     const isFolder = !bookmark.url && !bookmark._isTab; // Folder if no URL and not a tab
@@ -775,13 +775,13 @@ const renderer = {
     dialog.innerHTML = `
       <h3 style="margin:0 0 16px 0;font-size:16px;">${titleText}</h3>
       <input type="text" class="prd-stv-folder-search" placeholder="Search folders..." 
-        style="width:100%;padding:8px;background:#3a3a3a;border:1px solid #555;color:#fff;border-radius:4px;margin-bottom:16px;box-sizing:border-box;">
-      <div class="prd-stv-folder-list" style="max-height:300px;overflow-y:auto;border:1px solid #555;border-radius:4px;">
+        style="width:100%;padding:8px;background:#3a3a3a;border:1px solid #555;color:#fff;border-radius:15px;margin-bottom:16px;box-sizing:border-box;">
+      <div class="prd-stv-folder-list" style="max-height:300px;overflow-y:auto;border:1px solid #555;border-radius:15px;">
         <div style="padding:16px;text-align:center;color:#999;">Loading folders...</div>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
-        <button class="prd-stv-cancel-btn" style="padding:8px 16px;background:#555;color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
-        <button class="prd-stv-move-btn" style="padding:8px 16px;background:#b9a079;color:#000;border:none;border-radius:4px;cursor:pointer;" disabled>${actionText}</button>
+        <button class="prd-stv-cancel-btn" style="padding:8px 16px;background:#555;color:#fff;border:none;border-radius:15px;cursor:pointer;">Cancel</button>
+        <button class="prd-stv-move-btn" style="padding:8px 16px;background:#b9a079;color:#000;border:none;border-radius:15px;cursor:pointer;" disabled>${actionText}</button>
       </div>
     `;
     

@@ -76,7 +76,7 @@ const utils = {
     toast.id = 'prd-stv-toast';
     toast.style.cssText = `
       position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-      background: #333; color: #fff; padding: 8px 16px; border-radius: 4px;
+      background: #333; color: #fff; padding: 8px 16px; border-radius: 15px;
       font-size: 14px; z-index: 10000; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     `;
     toast.textContent = message;

@@ -471,7 +471,7 @@ function showDeleteConfirm() {
     const controlsHtml = (isBookmark || isTab) ? `
       <div class="prd-stv-item-controls" style="opacity:0;transition:opacity 0.2s ease;margin-left:auto;padding-left:8px;">
         <button class="prd-stv-menu-btn" title="More options" ${isBookmark ? `data-bookmark-id="${item.id}"` : `data-tab-id="${item.id}"`}
-          style="background:transparent;border:none;color:#9b9b9b;font-size:16px;cursor:pointer;padding:4px;border-radius:3px;">⋯</button>
+          style="background:transparent;border:none;color:#9b9b9b;font-size:16px;cursor:pointer;padding:4px;border-radius:15px;">⋯</button>
       </div>
     ` : '';
     
@@ -689,7 +689,7 @@ function showToast(message, duration = 2000) {
       position: fixed;
       background: #2b2b2b;
       border: 1px solid #555;
-      border-radius: 6px;
+      border-radius: 15px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       min-width: 120px;
       overflow: hidden;
@@ -759,7 +759,7 @@ function showToast(message, duration = 2000) {
     const input = document.createElement('input');
     input.type = 'text';
     input.value = currentTitle;
-    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:2px;font-size:14px;outline:none;width:100%;';
+    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:15px;font-size:14px;outline:none;width:100%;';
     
     // Replace title with input
     titleElement.innerHTML = '';
@@ -822,7 +822,7 @@ function showToast(message, duration = 2000) {
       position: fixed;
       background: #2b2b2b;
       border: 1px solid #555;
-      border-radius: 6px;
+      border-radius: 15px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
       min-width: 120px;
       overflow: hidden;
@@ -942,4 +942,3 @@ function showToast(message, duration = 2000) {
     }
   });
 })();
-
