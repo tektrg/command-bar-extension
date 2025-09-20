@@ -32,6 +32,8 @@
     // Application state
     const state = {
       query: '',
+      // Keyboard navigation selected index for sidepanel list
+      selectedIndex: -1,
       bookmarksRoots: [],
       filteredTree: [],
       expanded: new Set(),
@@ -405,6 +407,102 @@
     applyBookmarkFilter();
   }
 
+  // ----- Keyboard navigation helpers (sidepanel) -----
+  function getLinearItems() {
+    return Array.from(elements.combined.querySelectorAll('.prd-stv-cmd-item'));
+  }
+
+  function clearSelectionHighlight() {
+    elements.combined
+      .querySelectorAll('.prd-stv-cmd-item.prd-stv-active')
+      .forEach(el => el.classList.remove('prd-stv-active'));
+  }
+
+  function ensureIndexInRange(index, items) {
+    if (!items.length) return -1;
+    if (index < -1) return -1;
+    if (index >= items.length) return items.length - 1;
+    return index;
+  }
+
+  function updateSelection(newIndex) {
+    const items = getLinearItems();
+    newIndex = ensureIndexInRange(newIndex, items);
+    clearSelectionHighlight();
+    state.selectedIndex = newIndex;
+    if (newIndex >= 0 && items[newIndex]) {
+      const el = items[newIndex];
+      el.classList.add('prd-stv-active');
+      el.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function resetSelection() {
+    state.selectedIndex = -1;
+    clearSelectionHighlight();
+  }
+
+  function handleNavigationKey(e) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return false;
+    const items = getLinearItems();
+    if (!items.length) return true;
+    e.preventDefault();
+    const dir = e.key === 'ArrowDown' ? 1 : -1;
+    if (state.selectedIndex === -1) {
+      updateSelection(e.key === 'ArrowDown' ? 0 : items.length - 1);
+    } else {
+      updateSelection(state.selectedIndex + dir);
+    }
+    return true;
+  }
+
+  function handleActivationKey(e) {
+    if (e.key !== 'Enter') return false;
+    const items = getLinearItems();
+    const idx = state.selectedIndex;
+    if (idx < 0 || !items[idx]) return true;
+    e.preventDefault();
+    const el = items[idx];
+    const itemType = el.dataset.itemType || '';
+    if (el.classList.contains('tab-from-bookmark') && itemType !== 'bookmark') {
+      // Do not activate dimmed tabs opened from bookmarks
+      return true;
+    }
+    if (itemType === 'bookmark') {
+      const bookmarkId = el.dataset.id;
+      const bookmark = state.itemMaps.bookmarks.get(bookmarkId);
+      if (bookmark) openUrl(bookmark.url, null, bookmarkId);
+    } else {
+      const tabId = Number(el.dataset.id);
+      const tab = state.itemMaps.tabs.get(tabId) || state.tabs.find(t => t.id === tabId);
+      if (tab) activateTab(tab);
+    }
+    return true;
+  }
+
+  function attachKeyboardHandlers() {
+    // Input-focused navigation
+    elements.input.addEventListener('keydown', (e) => {
+      if (handleNavigationKey(e)) return;
+      if (handleActivationKey(e)) return;
+    });
+
+    // Allow navigation when focus is within the list
+    elements.combined.addEventListener('keydown', (e) => {
+      if (handleNavigationKey(e)) return;
+      if (handleActivationKey(e)) return;
+    });
+
+    // Keep selection in sync when clicking with mouse
+    elements.combined.addEventListener('click', (e) => {
+      const item = e.target.closest('.prd-stv-cmd-item');
+      if (!item) return;
+      const items = getLinearItems();
+      const idx = items.indexOf(item);
+      if (idx !== -1) updateSelection(idx);
+    });
+  }
+
   function applyBookmarkFilter() {
     const query = state.query;
     if (!query) {
@@ -472,6 +570,8 @@
     applyBookmarkFilter();
     applyTabFilter();
     window.renderer.render(state, elements);
+    // Reset selection for new result set
+    resetSelection();
   }, 200);
 
   // Utility function to count open bookmarks in a folder (one level only)
@@ -578,8 +678,15 @@
     // Clean up any stale bookmark-tab relationships (tabs that no longer exist)
     await cleanupStaleBookmarkTabLinks();
     window.renderer.render(state, elements);
+    // Re-apply selection highlight after render
+    updateSelection(state.selectedIndex);
 
     elements.input.addEventListener('input', onSearch);
+    // Reset selection when typing a new query
+    elements.input.addEventListener('input', () => { resetSelection(); });
+
+    // Keyboard navigation bindings
+    attachKeyboardHandlers();
 
     // Listen for storage changes to sync between windows
     chrome.storage.onChanged.addListener((changes, namespace) => {
