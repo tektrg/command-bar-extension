@@ -79,7 +79,7 @@ body {
 }
 
 [data-surface="popup"] .prd-stv-list {
-  max-height: 320px;
+  max-height: 800px;
 }
 
 .prd-stv-list::-webkit-scrollbar {
