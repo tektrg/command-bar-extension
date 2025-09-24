@@ -14,12 +14,16 @@
       forceReinitialize: surface === 'popup',
     };
 
-    if (!window.appBootstrap || typeof window.appBootstrap.init !== 'function') {
-      console.error('Command bar bootstrap module is missing');
-      return;
-    }
+    const checkAndInitBootstrap = () => {
+      if (!window.appBootstrap || typeof window.appBootstrap.init !== 'function') {
+        // Wait for appBootstrap to be available
+        setTimeout(checkAndInitBootstrap, 10);
+        return;
+      }
+      window.appBootstrap.init(config);
+    };
 
-    window.appBootstrap.init(config);
+    checkAndInitBootstrap();
   };
 
   if (document.readyState === 'loading') {

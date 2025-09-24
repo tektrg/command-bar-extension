@@ -42,6 +42,7 @@
       inactiveTabs: [],
       filteredInactiveTabs: [],
       bookmarkTabRelationships: {}, // bookmarkId -> tabId mapping
+      tabSortMode: 'position', // Default tab sort mode
       dragState: {
         isDragging: false,
         draggedItem: null,
@@ -227,7 +228,7 @@
       await removeBookmarkTabRelationship(tabId);
       await chrome.tabs.remove(tabId);
       await reloadTabs();
-      window.renderer.render(state, elements);
+      await window.renderer.render(state, elements);
       window.utils.showToast('Tab closed');
     } catch {
       window.utils.showToast('Failed to close tab');
@@ -241,7 +242,7 @@
         await removeBookmarkTabRelationship(tabId);
         await chrome.tabs.remove(tabId);
         await reloadTabs();
-        window.renderer.render(state, elements);
+        await window.renderer.render(state, elements);
         window.utils.showToast('Tab closed');
       }
     } catch {
@@ -257,7 +258,7 @@
         index: tab.index + 1
       });
       await reloadTabs();
-      window.renderer.render(state, elements);
+      await window.renderer.render(state, elements);
       window.utils.showToast('Tab duplicated');
     } catch {
       window.utils.showToast('Failed to duplicate tab');
@@ -268,7 +269,7 @@
     try {
       await chrome.bookmarks.remove(bookmarkId);
       await reloadBookmarks();
-      window.renderer.render(state, elements);
+      await window.renderer.render(state, elements);
       window.utils.showToast('Bookmark deleted');
     } catch {
       window.utils.showToast('Failed to delete bookmark');
@@ -293,7 +294,7 @@
       await handleNewBookmarkCreation(bookmark, activeTab.id);
 
       await reloadBookmarks();
-      window.renderer.render(state, elements);
+      await window.renderer.render(state, elements);
       window.utils.showToast('Tab saved to folder');
     } catch {
       window.utils.showToast('Failed to save tab');
@@ -309,7 +310,7 @@
         if (tab) {
           await createBookmarkTabRelationship(bookmark.id, sourceTabId);
           // Update UI to show the highlighted bookmark
-          window.renderer.render(state, elements);
+          await window.renderer.render(state, elements);
         }
         return;
       }
@@ -320,7 +321,7 @@
         if (matchingTab) {
           await createBookmarkTabRelationship(bookmark.id, matchingTab.id);
           // Update UI to show the highlighted bookmark
-          window.renderer.render(state, elements);
+          await window.renderer.render(state, elements);
         }
       }
     } catch (error) {
@@ -356,7 +357,7 @@
         // If this was a bookmark click, create the relationship
         if (bookmarkId) {
           await createBookmarkTabRelationship(bookmarkId, matchingTab.id);
-          window.renderer.render(state, elements);
+          await window.renderer.render(state, elements);
         }
         return;
       }
@@ -379,7 +380,7 @@
       if (bookmarkId && targetTab && targetTab.id) {
         await createBookmarkTabRelationship(bookmarkId, targetTab.id);
         // Re-render to show the updated relationship
-        window.renderer.render(state, elements);
+        await window.renderer.render(state, elements);
       }
 
       maybeCloseSurface();
@@ -569,7 +570,7 @@
     state.query = (elements.input.value || '').trim();
     applyBookmarkFilter();
     applyTabFilter();
-    window.renderer.render(state, elements);
+    await window.renderer.render(state, elements);
     // Reset selection for new result set
     resetSelection();
   }, 200);
@@ -618,7 +619,7 @@
       
       // Reload tabs to update state
       await reloadTabs();
-      window.renderer.render(state, elements);
+      await window.renderer.render(state, elements);
       window.utils.showToast(`Closed ${tabCount} inactive tabs`);
     } catch (error) {
       console.error('Failed to close inactive tabs:', error);
@@ -671,13 +672,14 @@
     await Promise.all([
       window.storage.loadExpandedFolders(state),
       window.storage.loadBookmarkTabLinks(state),
+      window.storage.loadTabSortMode(state),
       reloadBookmarks(), 
       reloadTabs()
     ]);
     
     // Clean up any stale bookmark-tab relationships (tabs that no longer exist)
     await cleanupStaleBookmarkTabLinks();
-    window.renderer.render(state, elements);
+    await window.renderer.render(state, elements);
     // Re-apply selection highlight after render
     updateSelection(state.selectedIndex);
 
@@ -689,14 +691,14 @@
     attachKeyboardHandlers();
 
     // Listen for storage changes to sync between windows
-    chrome.storage.onChanged.addListener((changes, namespace) => {
+    chrome.storage.onChanged.addListener(async (changes, namespace) => {
       if (namespace === 'local' && changes[window.CONSTANTS.STORAGE_KEYS.BOOKMARK_TAB_LINKS]) {
         // Another window updated bookmark-tab relationships
         const newRelationships = changes[window.CONSTANTS.STORAGE_KEYS.BOOKMARK_TAB_LINKS].newValue;
         if (newRelationships && typeof newRelationships === 'object') {
           state.bookmarkTabRelationships = newRelationships;
           // Re-render to update bookmark highlighting across windows
-          window.renderer.render(state, elements);
+          await window.renderer.render(state, elements);
         }
       }
     });
@@ -715,7 +717,7 @@
         if (state.query) {
           // Re-render filtered results
           applyBookmarkFilter();
-          window.renderer.render(state, elements);
+          await window.renderer.render(state, elements);
         } else {
           // Insert single item
           await window.renderer.insertBookmarkAtCorrectPosition(bookmark, state, elements);
@@ -736,7 +738,7 @@
           if (moveInfo.parentId) window.folderState.ensureExpanded(moveInfo.parentId, state, window.storage);
           if (state.query) {
             applyBookmarkFilter();
-            window.renderer.render(state, elements);
+            await window.renderer.render(state, elements);
           } else {
             await window.renderer.insertBookmarkAtCorrectPosition(bookmark, state, elements);
           }
@@ -752,7 +754,7 @@
         // Only trigger filter/search re-application if query exists
         if (state.query) {
           applyBookmarkFilter();
-          window.renderer.render(state, elements);
+          await window.renderer.render(state, elements);
         }
       });
 
@@ -770,13 +772,13 @@
         state.itemMaps.tabs.set(tab.id, tab);
         if (state.query) {
           // Re-categorize and re-render when searching
-          reloadTabs().then(() => {
-            window.renderer.render(state, elements);
+          reloadTabs().then(async () => {
+            await window.renderer.render(state, elements);
           });
         } else {
           // Update tabs array and insert at correct position
-          reloadTabs().then(() => {
-            window.renderer.render(state, elements);
+          reloadTabs().then(async () => {
+            await window.renderer.render(state, elements);
           });
         }
       });
@@ -811,7 +813,7 @@
         // If activity status changed, do a full reload to re-categorize
         if ((wasInActive && isNowInactive) || (wasInInactive && !isNowInactive)) {
           await reloadTabs();
-          window.renderer.render(state, elements);
+          await window.renderer.render(state, elements);
         } else {
           // Update the tab in the appropriate array
           const activeIndex = state.tabs.findIndex(t => t.id === tabId);
@@ -869,7 +871,7 @@
             }
             
             // Force a full re-render to update all tab highlight states
-            window.renderer.render(state, elements);
+            await window.renderer.render(state, elements);
           }
         } catch (error) {
           console.error('Failed to handle tab activation:', error);

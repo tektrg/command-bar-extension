@@ -576,3 +576,54 @@ img.prd-stv-favicon {
 .prd-stv-section-btn:hover {
   background: #ff6666 !important;
 }
+
+.prd-stv-context-item.selected {
+  background: #3a3a3a;
+}
+
+.prd-stv-context-item.selected:hover {
+  background: #4a4a4a;
+}
+
+.prd-stv-context-item span:last-child {
+  margin-left: auto;
+  font-weight: bold;
+}
+
+/* Tab sort icon buttons */
+.prd-stv-tab-sort-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prd-stv-sort-icon {
+  background: transparent;
+  border: none;
+  color: #9b9b9b;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.prd-stv-sort-icon:hover {
+  background: #353535;
+  color: #f5f5f5;
+}
+
+.prd-stv-sort-icon.active {
+  background: #b9a079;
+  color: #2b2b2b;
+}
+
+.prd-stv-sort-icon.active:hover {
+  background: #c7b08a;
+}
+
+.prd-stv-sort-icon .material-icons-round {
+  font-size: 16px;
+}

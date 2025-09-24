@@ -1,8 +1,8 @@
 // Rendering module for the sidepanel extension
 
 const renderer = {
-  render: (state, elements) => {
-    renderer.renderCombined(state, elements);
+  render: async (state, elements) => {
+    await renderer.renderCombined(state, elements);
     if (window.dragDrop && typeof window.dragDrop.refreshSortables === 'function') {
       window.dragDrop.refreshSortables(state, elements);
     }
@@ -116,56 +116,123 @@ const renderer = {
     return parentFolder.querySelector('.bm-children');
   },
 
-  renderCombined: (state, elements) => {
+  renderCombined: async (state, elements) => {
     elements.combined.innerHTML = '';
     
     // Render bookmarks first
-    const roots = state.filteredTree.length ? state.filteredTree : state.bookmarksRoots;
+    // If there's an active query, use filtered results (even if empty)
+    // Otherwise, show the full bookmarks tree
+    const roots = (state.filteredTree.length || state.query) ? state.filteredTree : state.bookmarksRoots;
     if (roots && roots.length) {
-      // Add bookmarks section header if there are items
-      const bookmarkHeader = document.createElement('div');
-      bookmarkHeader.className = 'prd-stv-window-separator';
-      bookmarkHeader.innerHTML = '<span>Bookmarks</span>';
-      elements.combined.appendChild(bookmarkHeader);
-      
       roots.forEach(root => elements.combined.appendChild(renderer.renderNode(root, 0, state)));
     }
     
     // Render active tabs
     const tabList = state.filteredTabs.length || state.query ? state.filteredTabs : state.tabs;
     if (tabList && tabList.length) {
-      // Add tabs section header if there are items
-      const tabHeader = document.createElement('div');
-      tabHeader.className = 'prd-stv-window-separator';
-      tabHeader.innerHTML = '<span>Open Tabs</span>';
+      // Sort tabs based on current sort mode
+      const sortMode = window.tabSort ? window.tabSort.getCurrentMode(state) : 'position';
+      const sortedTabs = window.tabSort ? window.tabSort.sortTabs(tabList, sortMode) : tabList;
+      
+      // Create tabs section header with icon buttons
+      const tabHeader = renderer.createTabSortHeader(state, elements);
       elements.combined.appendChild(tabHeader);
       
-      let currentWindowId = null;
-      tabList.forEach(tab => {
-        // Add window separator if we're switching to a new window
-        if (tab.windowId !== currentWindowId) {
+      // Render tabs with grouping based on sort mode
+      const useWindowGrouping = window.tabSort ? window.tabSort.usesWindowGrouping(sortMode) : true;
+      const useDomainGrouping = window.tabSort ? window.tabSort.usesDomainGrouping(sortMode) : false;
+      
+      if (useWindowGrouping) {
+        // Group by window (position mode)
+        let currentWindowId = null;
+        sortedTabs.forEach(tab => {
+          // Add window separator if we're switching to a new window
+          if (tab.windowId !== currentWindowId) {
+            const separator = document.createElement('div');
+            separator.className = 'prd-stv-window-separator';
+            separator.innerHTML = `<span>Window ${tab.windowId}</span>`;
+            separator.style.fontSize = '10px';
+            separator.style.color = '#777';
+            elements.combined.appendChild(separator);
+            currentWindowId = tab.windowId;
+          }
+          
+          elements.combined.appendChild(renderer.renderTabItem(tab, state));
+        });
+      } else if (useDomainGrouping) {
+        // Group by domain (domain mode)
+        const domainGroups = window.tabSort.groupTabsByDomain(sortedTabs);
+        
+        domainGroups.forEach((tabs, domain) => {
+          // Add domain separator
           const separator = document.createElement('div');
           separator.className = 'prd-stv-window-separator';
-          separator.innerHTML = `<span>Window ${tab.windowId}</span>`;
+          separator.innerHTML = `<span class="material-icons-round" style="font-size: 12px; margin-right: 6px;">public</span><span>${domain}</span>`;
           separator.style.fontSize = '10px';
           separator.style.color = '#777';
           elements.combined.appendChild(separator);
-          currentWindowId = tab.windowId;
-        }
-        
-        elements.combined.appendChild(renderer.renderTabItem(tab, state));
-      });
+          
+          // Render tabs in this domain
+          tabs.forEach(tab => {
+            elements.combined.appendChild(renderer.renderTabItem(tab, state));
+          });
+        });
+      } else {
+        // No grouping (last visit mode)
+        sortedTabs.forEach(tab => {
+          elements.combined.appendChild(renderer.renderTabItem(tab, state));
+        });
+      }
     }
     
     // Render inactive tabs section
     renderer.renderInactiveTabsSection(state, elements);
+
+    // Determine which inactive tab list is actually rendered
+    const inactiveList = (state.filteredInactiveTabs.length || state.query) ? state.filteredInactiveTabs : state.inactiveTabs;
+
+    // Check if results are empty and search history if needed
+    const hasResults = (roots && roots.length) || (tabList && tabList.length) || (inactiveList && inactiveList.length);
     
-    // Show empty state if no items
-    if ((!roots || !roots.length) && (!tabList || !tabList.length) && (!state.inactiveTabs || !state.inactiveTabs.length)) {
-      const empty = document.createElement('div');
-      empty.className = 'prd-stv-empty';
-      empty.textContent = 'No items found';
-      elements.combined.appendChild(empty);
+    if (!hasResults) {
+      if (state.query && state.query.trim()) {
+        // Search results are empty, try to load history
+        try {
+          const historyResults = await renderer.searchRecentHistory(state.query);
+          if (historyResults && historyResults.length) {
+            // Create history section header
+            const historyHeader = document.createElement('div');
+            historyHeader.className = 'prd-stv-window-separator';
+            historyHeader.innerHTML = `<span class="material-icons-round" style="font-size: 12px; margin-right: 6px;">history</span><span>Recent History</span>`;
+            historyHeader.style.fontSize = '10px';
+            historyHeader.style.color = '#777';
+            elements.combined.appendChild(historyHeader);
+            
+            // Render history items
+            historyResults.forEach(historyItem => {
+              elements.combined.appendChild(renderer.renderHistoryItem(historyItem, state));
+            });
+          } else {
+            // Show empty state
+            const empty = document.createElement('div');
+            empty.className = 'prd-stv-empty';
+            empty.textContent = 'No items found';
+            elements.combined.appendChild(empty);
+          }
+        } catch (error) {
+          console.error('Failed to search history:', error);
+          const empty = document.createElement('div');
+          empty.className = 'prd-stv-empty';
+          empty.textContent = 'No items found';
+          elements.combined.appendChild(empty);
+        }
+      } else {
+        // No query, show normal empty state
+        const empty = document.createElement('div');
+        empty.className = 'prd-stv-empty';
+        empty.textContent = 'No items found';
+        elements.combined.appendChild(empty);
+      }
     }
   },
 
@@ -192,6 +259,48 @@ const renderer = {
     } else {
       header.innerHTML = `<span>${title}</span>`;
     }
+    
+    return header;
+  },
+
+  // Create tabs section header with icon buttons for sorting
+  createTabSortHeader: (state, elements) => {
+    const header = document.createElement('div');
+    header.className = 'prd-stv-window-separator';
+    
+    const currentMode = window.tabSort ? window.tabSort.getCurrentMode(state) : 'position';
+    
+    header.innerHTML = `
+      <span>Open Tabs</span>
+      <div class="prd-stv-tab-sort-icons">
+        <button class="prd-stv-sort-icon ${currentMode === 'position' ? 'active' : ''}" 
+                data-mode="position" 
+                title="Sort by tab position">
+          <span class="material-icons-round">tab</span>
+        </button>
+        <button class="prd-stv-sort-icon ${currentMode === 'lastVisit' ? 'active' : ''}" 
+                data-mode="lastVisit" 
+                title="Sort by last visit">
+          <span class="material-icons-round">hourglass_empty</span>
+        </button>
+        <button class="prd-stv-sort-icon ${currentMode === 'domain' ? 'active' : ''}" 
+                data-mode="domain" 
+                title="Sort by domain">
+          <span class="material-icons-round">public</span>
+        </button>
+      </div>
+    `;
+    
+    // Add event listeners to icon buttons
+    const iconButtons = header.querySelectorAll('.prd-stv-sort-icon');
+    iconButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const mode = button.dataset.mode;
+        if (mode && window.tabSort) {
+          window.tabSort.setMode(mode, state, window.storage, renderer, elements);
+        }
+      });
+    });
     
     return header;
   },
@@ -1001,6 +1110,143 @@ const renderer = {
       }
     });
   },
+
+  // Search recent history (last 30 days) with distinct URLs
+  searchRecentHistory: async (query) => {
+    if (!query || !query.trim()) return [];
+    
+    try {
+      // Calculate date 30 days ago
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+      
+      // Search history with query
+      const historyItems = await chrome.history.search({
+        text: query.toLowerCase(),
+        startTime: thirtyDaysAgo,
+        maxResults: 100
+      });
+      
+      if (!historyItems || historyItems.length === 0) return [];
+      
+      // Filter and deduplicate by URL, keeping the most recent visit
+      const urlMap = new Map();
+      
+      historyItems.forEach(item => {
+        if (item.url && item.title) {
+          const existing = urlMap.get(item.url);
+          if (!existing || (item.lastVisitTime && item.lastVisitTime > existing.lastVisitTime)) {
+            urlMap.set(item.url, {
+              id: item.id,
+              title: item.title || 'Untitled',
+              url: item.url,
+              lastVisitTime: item.lastVisitTime || 0,
+              visitCount: item.visitCount || 0,
+              source: 'history',
+              type: 'history'
+            });
+          }
+        }
+      });
+      
+      // Convert to array and sort by last visit time (most recent first)
+      const distinctResults = Array.from(urlMap.values())
+        .sort((a, b) => (b.lastVisitTime || 0) - (a.lastVisitTime || 0))
+        .slice(0, 20); // Limit to top 20 results
+      
+      return distinctResults;
+    } catch (error) {
+      console.error('Failed to search history:', error);
+      return [];
+    }
+  },
+
+  // Render a history item
+  renderHistoryItem: (historyItem, state) => {
+    const div = document.createElement('div');
+    div.className = 'prd-stv-cmd-item history-item';
+    div.dataset.id = historyItem.id || historyItem.url;
+    div.dataset.itemType = 'history';
+    div.setAttribute('title', `${historyItem.title || 'Untitled'}\n${historyItem.url}`);
+    
+    const { ITEM_TYPES } = window.CONSTANTS;
+    const favicon = window.utils.getFavicon({ type: ITEM_TYPES.HISTORY, url: historyItem.url });
+    const query = state.query;
+    
+    // Format last visit time
+    const timeAgo = historyItem.lastVisitTime ? 
+      window.utils.timeAgo(historyItem.lastVisitTime) : '';
+    
+    div.innerHTML = `
+      <div style="display:flex;flex:1;align-items:center;min-width:0;">
+        <img class="prd-stv-favicon" src="${favicon}" onerror="this.src='${window.CONSTANTS.ICONS.FALLBACK}'" />
+        <div style="flex:1;min-width:0;">
+          <span class="prd-stv-title">${window.utils.highlightMatches(historyItem.title || historyItem.url, query)}</span>
+          ${timeAgo ? `<div style="font-size:11px;color:#888;margin-top:1px;">${timeAgo}</div>` : ''}
+        </div>
+      </div>
+      <div class="prd-stv-item-controls">
+        <button class="prd-stv-menu-btn" title="More options" data-history-url="${historyItem.url}">⋯</button>
+      </div>
+    `;
+    
+    div.addEventListener('click', (e) => {
+      if (e.target.classList.contains('prd-stv-menu-btn')) {
+        e.stopPropagation();
+        renderer.showHistoryContextMenu(e, historyItem, div);
+      } else {
+        window.openUrl(historyItem.url, e);
+      }
+    });
+    
+    return div;
+  },
+
+  // Show context menu for history items
+  showHistoryContextMenu: (event, historyItem, itemElement) => {
+    // Remove any existing context menu
+    renderer.closeContextMenu();
+    
+    // Create context menu for history
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'prd-stv-context-menu';
+    contextMenu.innerHTML = `
+      <div class="prd-stv-context-item" data-action="open-new-tab">
+        <span>Open in New Tab</span>
+      </div>
+      <div class="prd-stv-context-item" data-action="remove-from-history">
+        <span>Remove from History</span>
+      </div>
+    `;
+    
+    // Position the menu relative to the clicked button
+    const buttonRect = event.target.getBoundingClientRect();
+    contextMenu.style.position = 'fixed';
+    contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
+    contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
+    contextMenu.style.zIndex = '10000';
+    
+    // Add to document
+    document.body.appendChild(contextMenu);
+    
+    // Handle menu item clicks
+    contextMenu.addEventListener('click', (e) => {
+      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+      if (action === 'open-new-tab') {
+        chrome.tabs.create({ url: historyItem.url });
+      } else if (action === 'remove-from-history') {
+        chrome.history.deleteUrl({ url: historyItem.url });
+        itemElement.remove();
+        window.utils.showToast('Removed from history');
+      }
+      renderer.closeContextMenu();
+    });
+    
+    // Close menu when clicking outside
+    setTimeout(() => {
+      document.addEventListener('click', renderer.closeContextMenu, { once: true });
+    }, 10);
+  },
+
 
 
 };
