@@ -123,6 +123,7 @@ body {
   width: 10px;
   color: #9b9b9b;
   font-size: 12px;
+  margin-right: 14px !important;
 }
 
 .bm-children {
@@ -282,11 +283,10 @@ img.prd-stv-favicon {
 
 .prd-stv-cmd-item:hover .prd-stv-close-btn {
   opacity: 1;
-  background: linear-gradient(90deg, transparent 0%, #353535 30%, #353535 100%);
 }
 
 .prd-stv-close-btn:hover {
-  background: #ff4444 !important;
+  background: #528263 !important;
   color: white;
 }
 
@@ -368,7 +368,7 @@ img.prd-stv-favicon {
 }
 
 .close-tab-btn:hover {
-  background: #ff4444 !important;
+  background: #22c55e !important;
   color: white;
 }
 
@@ -595,6 +595,7 @@ img.prd-stv-favicon {
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-left: 10px;
 }
 
 .prd-stv-sort-icon {
@@ -626,4 +627,11 @@ img.prd-stv-favicon {
 
 .prd-stv-sort-icon .material-icons-round {
   font-size: 16px;
+}
+
+/* Material Icons styling for close buttons */
+.prd-stv-close-btn .material-icons-round {
+  font-size: 14px;
+  line-height: 1;
+  display: block;
 }

@@ -673,6 +673,7 @@
       window.storage.loadExpandedFolders(state),
       window.storage.loadBookmarkTabLinks(state),
       window.storage.loadTabSortMode(state),
+      window.storage.loadBookmarkViewMode(state),
       reloadBookmarks(), 
       reloadTabs()
     ]);

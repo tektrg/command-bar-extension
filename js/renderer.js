@@ -121,9 +121,28 @@ const renderer = {
     
     // Render bookmarks first
     // If there's an active query, use filtered results (even if empty)
-    // Otherwise, show the full bookmarks tree
-    const roots = (state.filteredTree.length || state.query) ? state.filteredTree : state.bookmarksRoots;
+    // Otherwise, use the current view mode to determine what to show
+    let roots;
+    if (state.filteredTree.length || state.query) {
+      // When searching, show filtered results and switch to normal display mode
+      roots = state.filteredTree;
+    } else {
+      // Use view mode to determine display
+      if (window.bookmarkView) {
+        roots = window.bookmarkView.filterBookmarks(state.bookmarksRoots, state);
+      } else {
+        roots = state.bookmarksRoots;
+      }
+    }
+    
     if (roots && roots.length) {
+      // Create bookmarks section header with view mode icons (unless searching)
+      if (!state.query || !state.query.trim()) {
+        const bookmarkHeader = renderer.createBookmarkViewHeader(state, elements);
+        elements.combined.appendChild(bookmarkHeader);
+      }
+      
+      // Render bookmarks
       roots.forEach(root => elements.combined.appendChild(renderer.renderNode(root, 0, state)));
     }
     
@@ -263,6 +282,48 @@ const renderer = {
     return header;
   },
 
+  // Create bookmarks section header with icon buttons for view modes
+  createBookmarkViewHeader: (state, elements) => {
+    const header = document.createElement('div');
+    header.className = 'prd-stv-window-separator';
+    
+    const currentMode = window.bookmarkView ? window.bookmarkView.getCurrentMode(state) : 'folder';
+    
+    header.innerHTML = `
+      <span>Bookmarks</span>
+      <div class="prd-stv-tab-sort-icons">
+        <button class="prd-stv-sort-icon ${currentMode === 'folder' ? 'active' : ''}" 
+                data-mode="folder" 
+                title="Show folder tree">
+          <span class="material-icons-round">folder</span>
+        </button>
+        <button class="prd-stv-sort-icon ${currentMode === 'active' ? 'active' : ''}" 
+                data-mode="active" 
+                title="Show only open bookmarks">
+          <span class="material-icons-round">star</span>
+        </button>
+        <button class="prd-stv-sort-icon ${currentMode === 'domain' ? 'active' : ''}" 
+                data-mode="domain" 
+                title="Group by domain">
+          <span class="material-icons-round">public</span>
+        </button>
+      </div>
+    `;
+    
+    // Add event listeners to icon buttons
+    const iconButtons = header.querySelectorAll('.prd-stv-sort-icon');
+    iconButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const mode = button.dataset.mode;
+        if (mode && window.bookmarkView) {
+          window.bookmarkView.setMode(mode, state, window.storage, renderer, elements);
+        }
+      });
+    });
+    
+    return header;
+  },
+
   // Create tabs section header with icon buttons for sorting
   createTabSortHeader: (state, elements) => {
     const header = document.createElement('div');
@@ -350,7 +411,7 @@ const renderer = {
     
     header.innerHTML = `
       <div style="display:flex;flex:1;align-items:center;min-width:0;">
-        <span class="bm-twisty">${window.folderState.isExpanded(node.id, state) ? '▾' : '▸'}</span>
+        <span class="material-icons-round bm-twisty" style="font-size: 16px; margin-right: 4px;">${window.folderState.isExpanded(node.id, state) ? 'folder_open' : 'folder'}</span>
         <span style="flex:1;">${window.utils.escapeHtml(node.title || 'Untitled folder')}${countDisplay}</span>
       </div>
       <div class="prd-stv-item-controls" style="opacity:0;transition:opacity 0.2s;">
@@ -407,7 +468,7 @@ const renderer = {
     const { ITEM_TYPES } = window.CONSTANTS;
     const favicon = window.utils.getFavicon({ type: ITEM_TYPES.BOOKMARK, url: node.url });
     const query = state.query;
-    const buttonText = hasOpenTab ? '−' : '×';
+    const buttonText = hasOpenTab ? 'remove' : 'check';
     const buttonTitle = hasOpenTab ? 'Close tab' : 'Delete bookmark';
     
     div.innerHTML = `
@@ -417,12 +478,14 @@ const renderer = {
       </div>
       <div class="prd-stv-item-controls">
         <button class="prd-stv-menu-btn" title="More options" data-bookmark-id="${node.id}">⋯</button>
-        <button class="prd-stv-close-btn ${hasOpenTab ? 'close-tab-btn' : ''}" title="${buttonTitle}">${buttonText}</button>
+        <button class="prd-stv-close-btn ${hasOpenTab ? 'close-tab-btn' : ''}" title="${buttonTitle}">
+          <span class="material-icons-round">${buttonText}</span>
+        </button>
       </div>
     `;
     
     div.addEventListener('click', (e) => {
-      if (e.target.classList.contains('prd-stv-close-btn')) {
+      if (e.target.classList.contains('prd-stv-close-btn') || e.target.closest('.prd-stv-close-btn')) {
         e.stopPropagation();
         if (hasOpenTab) {
           window.closeTabFromBookmark(node.id);
@@ -481,14 +544,16 @@ const renderer = {
       </div>
       <div class="prd-stv-item-controls">
         <button class="prd-stv-menu-btn" title="More options" data-tab-id="${tab.id}">⋯</button>
-        <button class="prd-stv-close-btn" title="Close tab">×</button>
+        <button class="prd-stv-close-btn" title="Close tab">
+          <span class="material-icons-round">check</span>
+        </button>
       </div>
     `;
     
     // Make bookmark-opened tabs less interactive (dimmed)
     if (isFromBookmark) {
       div.addEventListener('click', (e) => {
-        if (e.target.classList.contains('prd-stv-close-btn')) {
+        if (e.target.classList.contains('prd-stv-close-btn') || e.target.closest('.prd-stv-close-btn')) {
           e.stopPropagation();
           window.closeTab(tab.id);
         } else if (e.target.classList.contains('prd-stv-menu-btn')) {
@@ -499,7 +564,7 @@ const renderer = {
       });
     } else {
       div.addEventListener('click', (e) => {
-        if (e.target.classList.contains('prd-stv-close-btn')) {
+        if (e.target.classList.contains('prd-stv-close-btn') || e.target.closest('.prd-stv-close-btn')) {
           e.stopPropagation();
           window.closeTab(tab.id);
         } else if (e.target.classList.contains('prd-stv-menu-btn')) {

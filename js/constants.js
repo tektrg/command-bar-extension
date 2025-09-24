@@ -8,7 +8,8 @@ const ICONS = {
 const STORAGE_KEYS = {
   EXPANDED_FOLDERS: 'expandedFolders',
   BOOKMARK_TAB_LINKS: 'bookmarkTabLinks',
-  TAB_SORT_MODE: 'tabSortMode'
+  TAB_SORT_MODE: 'tabSortMode',
+  BOOKMARK_VIEW_MODE: 'bookmarkViewMode'
 };
 
 const ITEM_TYPES = {

@@ -61,6 +61,19 @@ const storage = {
   async saveTabSortMode(state) {
     const { STORAGE_KEYS } = window.CONSTANTS;
     return await this.save(STORAGE_KEYS.TAB_SORT_MODE, state.tabSortMode);
+  },
+
+  async loadBookmarkViewMode(state) {
+    const { STORAGE_KEYS } = window.CONSTANTS;
+    const viewMode = await this.load(STORAGE_KEYS.BOOKMARK_VIEW_MODE, 'folder');
+    if (typeof viewMode === 'string') {
+      state.bookmarkViewMode = viewMode;
+    }
+  },
+
+  async saveBookmarkViewMode(state) {
+    const { STORAGE_KEYS } = window.CONSTANTS;
+    return await this.save(STORAGE_KEYS.BOOKMARK_VIEW_MODE, state.bookmarkViewMode);
   }
 };
 
