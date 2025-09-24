@@ -14,7 +14,8 @@
       "Bash(cd:*)",
       "Bash(node:*)",
       "Read(/Users/trungluong/**)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Read(//Users/trungluong/**)"
     ],
     "deny": []
   }
