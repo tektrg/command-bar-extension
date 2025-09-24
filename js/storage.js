@@ -48,6 +48,19 @@ const storage = {
     // Save bookmark-tab relationships which will trigger storage.onChanged events
     // in other sidepanel windows for cross-window synchronization
     return await this.save(STORAGE_KEYS.BOOKMARK_TAB_LINKS, state.bookmarkTabRelationships);
+  },
+
+  async loadTabSortMode(state) {
+    const { STORAGE_KEYS } = window.CONSTANTS;
+    const sortMode = await this.load(STORAGE_KEYS.TAB_SORT_MODE, 'position');
+    if (typeof sortMode === 'string') {
+      state.tabSortMode = sortMode;
+    }
+  },
+
+  async saveTabSortMode(state) {
+    const { STORAGE_KEYS } = window.CONSTANTS;
+    return await this.save(STORAGE_KEYS.TAB_SORT_MODE, state.tabSortMode);
   }
 };
 
