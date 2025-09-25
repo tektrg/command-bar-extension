@@ -217,9 +217,14 @@
   color: #9b9b9b !important;
   font-size: 16px !important;
   cursor: pointer !important;
-  padding: 4px !important;
-  border-radius: 15px !important;
+  padding: 6px !important;
+  border-radius: 8px !important;
   transition: all 0.2s ease !important;
+  width: 24px !important;
+  height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .prd-stv-menu-btn:hover {
