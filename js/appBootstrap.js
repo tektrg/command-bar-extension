@@ -27,6 +27,7 @@
       input: null,
       combined: null,
       root: null,
+      clearButton: null,
     };
 
     // Application state
@@ -566,6 +567,23 @@
     });
   }
 
+  function toggleClearButton() {
+    if (elements.clearButton) {
+      const hasValue = elements.input.value.trim().length > 0;
+      elements.clearButton.style.display = hasValue ? 'flex' : 'none';
+    }
+  }
+
+  function clearInput() {
+    if (elements.input) {
+      elements.input.value = '';
+      elements.input.focus();
+      toggleClearButton();
+      // Trigger search to update results
+      onSearch();
+    }
+  }
+
   const onSearch = window.utils.debounce(async () => {
     state.query = (elements.input.value || '').trim();
     applyBookmarkFilter();
@@ -659,6 +677,7 @@
 
     elements.input = resolveElement(config.inputId);
     elements.combined = resolveElement(config.listId);
+    elements.clearButton = resolveElement('prd-stv-input-clear');
 
     if (!elements.input || !elements.combined) {
       console.warn('Command bar bootstrap: missing input or list element', config);
@@ -685,8 +704,14 @@
     updateSelection(state.selectedIndex);
 
     elements.input.addEventListener('input', onSearch);
+    elements.input.addEventListener('input', toggleClearButton);
     // Reset selection when typing a new query
     elements.input.addEventListener('input', () => { resetSelection(); });
+
+    // Clear button functionality
+    if (elements.clearButton) {
+      elements.clearButton.addEventListener('click', clearInput);
+    }
 
     // Keyboard navigation bindings
     attachKeyboardHandlers();

@@ -135,15 +135,26 @@ const renderer = {
       }
     }
     
-    if (roots && roots.length) {
-      // Create bookmarks section header with view mode icons (unless searching)
-      if (!state.query || !state.query.trim()) {
-        const bookmarkHeader = renderer.createBookmarkViewHeader(state, elements);
-        elements.combined.appendChild(bookmarkHeader);
-      }
-      
+    // Check if we should show bookmarks header (show even when roots is empty for non-search modes)
+    const shouldShowBookmarkHeader = !state.query || !state.query.trim();
+    const isActiveBookmarkMode = window.bookmarkView && window.bookmarkView.getCurrentMode(state) === 'active';
+    const hasBookmarksToShow = roots && roots.length > 0;
+    
+    if (shouldShowBookmarkHeader && (hasBookmarksToShow || isActiveBookmarkMode)) {
+      const bookmarkHeader = renderer.createBookmarkViewHeader(state, elements);
+      elements.combined.appendChild(bookmarkHeader);
+    }
+    
+    if (hasBookmarksToShow) {
       // Render bookmarks
       roots.forEach(root => elements.combined.appendChild(renderer.renderNode(root, 0, state)));
+    } else if (isActiveBookmarkMode && shouldShowBookmarkHeader) {
+      // Show empty state for active bookmark mode when no bookmarks are highlighted
+      const emptyState = document.createElement('div');
+      emptyState.className = 'prd-stv-empty';
+      emptyState.textContent = 'No active bookmarks';
+      emptyState.style.cssText = 'padding: 16px; text-align: center; color: #999; font-style: italic;';
+      elements.combined.appendChild(emptyState);
     }
     
     // Render active tabs

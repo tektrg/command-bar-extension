@@ -1,10 +1,15 @@
 <div id="prd-stv-sidepanel-root" data-surface="{{surface}}" data-close-on-open="{{closeOnOpen}}" data-focus-input="{{focusInput}}">
-  <input
-    id="prd-stv-sidepanel-input"
-    type="text"
-    placeholder="Search bookmarks, tabs, and commands..."
-    autofocus
-  />
+  <div class="prd-stv-input-container">
+    <input
+      id="prd-stv-sidepanel-input"
+      type="text"
+      placeholder="Search bookmarks, tabs, and commands..."
+      autofocus
+    />
+    <button type="button" class="prd-stv-input-clear" id="prd-stv-input-clear" style="display: none;">
+      <span class="material-icons-round">close</span>
+    </button>
+  </div>
   <div class="prd-stv-section" id="sec-combined">
     <div class="prd-stv-list" id="combined-list"></div>
   </div>
