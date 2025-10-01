@@ -717,38 +717,44 @@ const renderer = {
   showFolderContextMenu: (event, folder) => {
     // Remove any existing context menu
     renderer.closeContextMenu();
-    
+
     // Create context menu for folders
     const contextMenu = document.createElement('div');
     contextMenu.className = 'prd-stv-context-menu';
-    
+
     const openCount = window.getOpenBookmarkCountInFolder(folder.id, window.state);
-    const closeTabsItem = openCount > 0 ? 
+    const closeTabsItem = openCount > 0 ?
       '<div class="prd-stv-context-item" data-action="close-tabs"><span>Close tabs</span></div>' : '';
-    
+
     contextMenu.innerHTML = `
       <div class="prd-stv-context-item" data-action="save-tab-here">
         <span>Save tab here</span>
       </div>
       ${closeTabsItem}
+      <div class="prd-stv-context-item" data-action="new-folder">
+        <span>New folder...</span>
+      </div>
       <div class="prd-stv-context-item" data-action="rename">
         <span>Rename</span>
       </div>
       <div class="prd-stv-context-item" data-action="move">
         <span>Move to...</span>
       </div>
+      <div class="prd-stv-context-item" data-action="delete-folder" style="color: #ff6b6b;">
+        <span>Delete folder</span>
+      </div>
     `;
-    
+
     // Position the menu relative to the clicked button
     const buttonRect = event.target.getBoundingClientRect();
     contextMenu.style.position = 'fixed';
     contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
     contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
     contextMenu.style.zIndex = '10000';
-    
+
     // Add to document
     document.body.appendChild(contextMenu);
-    
+
     // Handle menu item clicks
     contextMenu.addEventListener('click', (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
@@ -756,14 +762,18 @@ const renderer = {
         window.saveActiveTabToFolder(folder.id);
       } else if (action === 'close-tabs') {
         window.closeTabsInFolder(folder.id);
+      } else if (action === 'new-folder') {
+        renderer.showNewFolderModal(folder.id);
       } else if (action === 'rename') {
         renderer.startFolderRename(folder);
       } else if (action === 'move') {
         renderer.showMoveDialog(folder);
+      } else if (action === 'delete-folder') {
+        renderer.showDeleteFolderModal(folder);
       }
       renderer.closeContextMenu();
     });
-    
+
     // Close menu when clicking outside
     setTimeout(() => {
       document.addEventListener('click', renderer.closeContextMenu, { once: true });
@@ -955,11 +965,19 @@ const renderer = {
     const isFolder = !bookmark.url && !bookmark._isTab; // Folder if no URL and not a tab
     const actionText = isTab ? 'Save' : 'Move';
     const itemType = isFolder ? 'folder' : (isTab ? 'bookmark' : 'bookmark');
-    const titleText = isTab ? `Save "${bookmark.title}" as bookmark` : `Move "${bookmark.title}" to ${itemType === 'folder' ? 'parent folder' : 'folder'}`;
-    
+    const titleText = isTab ? `Save as bookmark` : `Move "${bookmark.title}" to ${itemType === 'folder' ? 'parent folder' : 'folder'}`;
+
+    // Build dialog HTML with optional title input for tabs
+    const titleInputHTML = isTab ? `
+      <input type="text" class="prd-stv-title-input" placeholder="Bookmark title"
+        value="${window.utils.escapeHtml(bookmark.title || '')}"
+        style="width:100%;padding:8px;background:#3a3a3a;border:1px solid #555;color:#fff;border-radius:15px;margin-bottom:12px;box-sizing:border-box;font-size:14px;">
+    ` : '';
+
     dialog.innerHTML = `
       <h3 style="margin:0 0 16px 0;font-size:16px;">${titleText}</h3>
-      <input type="text" class="prd-stv-folder-search" placeholder="Search folders..." 
+      ${titleInputHTML}
+      <input type="text" class="prd-stv-folder-search" placeholder="Search folders..."
         style="width:100%;padding:8px;background:#3a3a3a;border:1px solid #555;color:#fff;border-radius:15px;margin-bottom:16px;box-sizing:border-box;">
       <div class="prd-stv-folder-list" style="max-height:300px;overflow-y:auto;border:1px solid #555;border-radius:15px;">
         <div style="padding:16px;text-align:center;color:#999;">Loading folders...</div>
@@ -975,16 +993,23 @@ const renderer = {
     
     // Load folder tree and setup interactions
     renderer.setupMoveDialog(dialog, bookmark, overlay);
-    
-    // Auto-focus the search input
+
+    // Auto-focus the title input for tabs, or search input for other items
+    const titleInput = dialog.querySelector('.prd-stv-title-input');
     const searchInput = dialog.querySelector('.prd-stv-folder-search');
-    if (searchInput) {
-      setTimeout(() => searchInput.focus(), 100); // Small delay to ensure modal is fully rendered
+    if (titleInput) {
+      setTimeout(() => {
+        titleInput.focus();
+        titleInput.select(); // Select all text for easy editing
+      }, 100);
+    } else if (searchInput) {
+      setTimeout(() => searchInput.focus(), 100);
     }
   },
 
   setupMoveDialog: async (dialog, bookmark, overlay) => {
     const folderList = dialog.querySelector('.prd-stv-folder-list');
+    const titleInput = dialog.querySelector('.prd-stv-title-input');
     const searchInput = dialog.querySelector('.prd-stv-folder-search');
     const moveBtn = dialog.querySelector('.prd-stv-move-btn');
     const cancelBtn = dialog.querySelector('.prd-stv-cancel-btn');
@@ -1043,10 +1068,23 @@ const renderer = {
       folderList.innerHTML = '<div style="padding:16px;text-align:center;color:#ff6666;">Failed to load folders</div>';
     }
     
+    // Title input keyboard navigation (for tabs)
+    if (titleInput) {
+      titleInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          searchInput.focus(); // Move focus to folder search
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          overlay.remove();
+        }
+      });
+    }
+
     // Search functionality
     searchInput.addEventListener('input', (e) => {
       const query = e.target.value.toLowerCase();
-      filteredFolders = allFolders.filter(folder => 
+      filteredFolders = allFolders.filter(folder =>
         folder.title.toLowerCase().includes(query) || folder.path.toLowerCase().includes(query)
       );
       selectedIndex = -1; // Reset selection when searching
@@ -1085,21 +1123,23 @@ const renderer = {
         try {
           if (bookmark._isTab) {
             // Handle tab -> bookmark creation
+            // Use the edited title from the input field, or fall back to bookmark.title
+            const editedTitle = titleInput ? titleInput.value.trim() : bookmark.title;
             const bookmarkData = {
               parentId: selectedFolderId,
-              title: bookmark.title || 'Untitled',
+              title: editedTitle || 'Untitled',
               url: bookmark.url
             };
-            
+
             const response = await chrome.runtime.sendMessage({
               type: 'CREATE_BOOKMARK',
               bookmarkData: bookmarkData
             });
-            
+
             if (response && response.success === false) {
               throw new Error(response.error || 'Create bookmark operation failed');
             }
-            
+
             window.utils.showToast('Tab saved as bookmark');
           } else {
             // Handle normal bookmark/folder move
@@ -1323,6 +1363,157 @@ const renderer = {
     }, 10);
   },
 
+  // Show modal for creating new folder
+  showNewFolderModal: (parentFolderId) => {
+    const modal = document.getElementById('prd-stv-folder-modal');
+    const input = document.getElementById('prd-stv-folder-name-input');
+    const saveBtn = document.getElementById('prd-stv-modal-save');
+    const cancelBtn = document.getElementById('prd-stv-modal-cancel');
+    const closeBtn = document.getElementById('prd-stv-modal-close');
+
+    if (!modal || !input || !saveBtn || !cancelBtn || !closeBtn) {
+      console.error('Modal elements not found');
+      return;
+    }
+
+    // Clear previous input and show modal
+    input.value = '';
+    modal.style.display = 'flex';
+
+    // Focus input after a small delay
+    setTimeout(() => input.focus(), 100);
+
+    // Handle save button click
+    const handleSave = async () => {
+      const folderName = input.value.trim();
+      if (!folderName) {
+        window.utils.showToast('Please enter a folder name');
+        return;
+      }
+
+      try {
+        // Create the new folder
+        const newFolder = await chrome.bookmarks.create({
+          parentId: parentFolderId,
+          title: folderName
+        });
+
+        window.utils.showToast(`Folder "${folderName}" created`);
+        modal.style.display = 'none';
+
+        // Reload bookmarks and update UI
+        await window.reloadBookmarks();
+        await window.folderState.ensureExpanded(parentFolderId, window.state, window.storage);
+        window.renderer.render(window.state, window.elements);
+      } catch (error) {
+        console.error('Failed to create folder:', error);
+        window.utils.showToast('Failed to create folder');
+      }
+    };
+
+    // Handle cancel/close
+    const handleClose = () => {
+      modal.style.display = 'none';
+      cleanup();
+    };
+
+    // Handle Enter key in input
+    const handleKeyPress = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleSave();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClose();
+      }
+    };
+
+    // Cleanup function to remove event listeners
+    const cleanup = () => {
+      saveBtn.removeEventListener('click', handleSave);
+      cancelBtn.removeEventListener('click', handleClose);
+      closeBtn.removeEventListener('click', handleClose);
+      input.removeEventListener('keydown', handleKeyPress);
+      modal.removeEventListener('click', handleModalOverlayClick);
+    };
+
+    // Handle clicking outside modal content
+    const handleModalOverlayClick = (e) => {
+      if (e.target === modal) {
+        handleClose();
+      }
+    };
+
+    // Add event listeners
+    saveBtn.addEventListener('click', handleSave);
+    cancelBtn.addEventListener('click', handleClose);
+    closeBtn.addEventListener('click', handleClose);
+    input.addEventListener('keydown', handleKeyPress);
+    modal.addEventListener('click', handleModalOverlayClick);
+  },
+
+  // Show modal for deleting folder
+  showDeleteFolderModal: (folder) => {
+    const modal = document.getElementById('prd-stv-confirm-modal');
+    const message = document.getElementById('prd-stv-confirm-message');
+    const deleteBtn = document.getElementById('prd-stv-confirm-delete');
+    const cancelBtn = document.getElementById('prd-stv-confirm-cancel');
+    const closeBtn = document.getElementById('prd-stv-confirm-modal-close');
+
+    if (!modal || !message || !deleteBtn || !cancelBtn || !closeBtn) {
+      console.error('Confirm modal elements not found');
+      return;
+    }
+
+    // Update message and show modal
+    message.textContent = `Are you sure you want to delete "${folder.title}"? All bookmarks and subfolders will be deleted.`;
+    modal.style.display = 'flex';
+
+    // Handle delete button click
+    const handleDelete = async () => {
+      try {
+        // Use Chrome's bookmarks API to remove the folder recursively
+        await chrome.bookmarks.removeTree(folder.id);
+
+        window.utils.showToast(`Folder "${folder.title}" deleted`);
+        modal.style.display = 'none';
+
+        // Reload bookmarks and update UI
+        await window.reloadBookmarks();
+        window.renderer.render(window.state, window.elements);
+      } catch (error) {
+        console.error('Failed to delete folder:', error);
+        window.utils.showToast('Failed to delete folder');
+      }
+    };
+
+    // Handle cancel/close
+    const handleClose = () => {
+      modal.style.display = 'none';
+      cleanup();
+    };
+
+    // Cleanup function to remove event listeners
+    const cleanup = () => {
+      deleteBtn.removeEventListener('click', handleDelete);
+      cancelBtn.removeEventListener('click', handleClose);
+      closeBtn.removeEventListener('click', handleClose);
+      modal.removeEventListener('click', handleModalOverlayClick);
+    };
+
+    // Handle clicking outside modal content
+    const handleModalOverlayClick = (e) => {
+      if (e.target === modal) {
+        handleClose();
+      }
+    };
+
+    // Add event listeners
+    deleteBtn.addEventListener('click', handleDelete);
+    cancelBtn.addEventListener('click', handleClose);
+    closeBtn.addEventListener('click', handleClose);
+    modal.addEventListener('click', handleModalOverlayClick);
+  },
 
 
 };

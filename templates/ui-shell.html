@@ -13,4 +13,47 @@
   <div class="prd-stv-section" id="sec-combined">
     <div class="prd-stv-list" id="combined-list"></div>
   </div>
+
+  <!-- Modal for creating new folder -->
+  <div id="prd-stv-folder-modal" class="prd-stv-modal" style="display: none;">
+    <div class="prd-stv-modal-content">
+      <div class="prd-stv-modal-header">
+        <h3>New Folder</h3>
+        <button class="prd-stv-modal-close" id="prd-stv-modal-close">
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>
+      <div class="prd-stv-modal-body">
+        <input
+          id="prd-stv-folder-name-input"
+          type="text"
+          placeholder="Folder name"
+          class="prd-stv-modal-input"
+        />
+      </div>
+      <div class="prd-stv-modal-footer">
+        <button class="prd-stv-modal-btn prd-stv-modal-btn-secondary" id="prd-stv-modal-cancel">Cancel</button>
+        <button class="prd-stv-modal-btn prd-stv-modal-btn-primary" id="prd-stv-modal-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for confirming folder deletion -->
+  <div id="prd-stv-confirm-modal" class="prd-stv-modal" style="display: none;">
+    <div class="prd-stv-modal-content">
+      <div class="prd-stv-modal-header">
+        <h3>Delete Folder</h3>
+        <button class="prd-stv-modal-close" id="prd-stv-confirm-modal-close">
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>
+      <div class="prd-stv-modal-body">
+        <p id="prd-stv-confirm-message">Are you sure you want to delete this folder?</p>
+      </div>
+      <div class="prd-stv-modal-footer">
+        <button class="prd-stv-modal-btn prd-stv-modal-btn-secondary" id="prd-stv-confirm-cancel">Cancel</button>
+        <button class="prd-stv-modal-btn prd-stv-modal-btn-danger" id="prd-stv-confirm-delete">Delete</button>
+      </div>
+    </div>
+  </div>
 </div>

@@ -209,6 +209,7 @@
 
 .prd-stv-cmd-item:hover .prd-stv-item-controls {
   opacity: 1 !important;
+  display: flex !important;
 }
 
 .prd-stv-menu-btn {
