@@ -1,0 +1,272 @@
+/* shadow-overlay.css - Styles for Shadow DOM encapsulated overlay */
+
+/* CSS Custom Properties for theming */
+:host {
+  --overlay-bg: rgba(0, 0, 0, 0.3);
+  --overlay-backdrop-blur: 8px;
+  --container-bg: #2b2b2b;
+  --container-text: #f5f5f5;
+  --input-bg: #3a3a3a;
+  --input-text: #fff;
+  --item-hover-bg: #353535;
+  --item-active-bg: #191919;
+  --url-text: #4d4d4d;
+  --highlight-color: #b9a079;
+  --toast-bg: #2b2b2b;
+  --status-text: #656363;
+  --status-confirm: #b9a079;
+  --menu-btn-hover-bg: #555;
+  --progress-bg: #c2c2c2;
+}
+
+#prd-stv-cmd-bar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  backdrop-filter: blur(var(--overlay-backdrop-blur));
+  background: var(--overlay-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+#prd-stv-cmd-bar-container {
+  min-width: 600px;
+  max-width: 900px;
+  width: 70%;
+  background: var(--container-bg);
+  border-radius: 15px;
+  padding: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  color: var(--container-text);
+}
+
+#prd-stv-cmd-bar-input {
+  width: 100%;
+  height: 50px;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  font-size: 16px;
+  border: none;
+  border-radius: 15px;
+  outline: none;
+  background: var(--input-bg);
+  color: var(--input-text);
+}
+
+/* Item-level progress bar */
+.prd-stv-prog {
+  height: 2px;
+  width: 0;
+  background: var(--progress-bg);
+  margin-top: 4px;
+}
+
+.prd-stv-prog.prd-stv-run {
+  animation: prd-stv-fill 1s linear forwards;
+}
+
+@keyframes prd-stv-fill {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
+#prd-stv-cmd-bar-list {
+  margin-top: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.prd-stv-cmd-item {
+  display: flex;
+  font-size: 16px;
+  align-items: flex-start;
+  padding: 10px;
+  border-radius: 15px;
+  cursor: pointer;
+  flex-direction: column;
+}
+
+.prd-stv-icon, img.prd-stv-favicon {
+  width: 16px;
+  height: 16px;
+  margin-top: 5px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.prd-stv-cmd-item:hover {
+  background: var(--item-hover-bg);
+}
+
+.prd-stv-cmd-item.prd-stv-active {
+  background: var(--item-active-bg);
+}
+
+.prd-stv-cmd-item .prd-stv-url {
+  font-size: 12px;
+  color: var(--url-text);
+  display: flex;
+  align-items: center;
+  padding: 2px 0px;
+}
+
+.prd-stv-cmd-item .prd-stv-url img {
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+}
+
+/* Highlighted query text */
+.prd-stv-hl {
+  text-decoration: underline;
+  text-decoration-color: var(--highlight-color);
+}
+
+/* --------------------
+   Smooth subtle transitions
+   -------------------- */
+
+/* Fade in the dimmed overlay */
+#prd-stv-cmd-bar-overlay {
+  animation: prd-stv-fadeIn 0.18s ease-out;
+}
+
+@keyframes prd-stv-fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Pop-in animation for the command palette container */
+#prd-stv-cmd-bar-container {
+  animation: prd-stv-popIn 0.18s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+@keyframes prd-stv-popIn {
+  0%   { transform: scale(0.96) translateY(8px); opacity: 0; }
+  100% { transform: scale(1) translateY(0);   opacity: 1; }
+}
+
+
+/* Animate removal of a list item (delete) */
+.prd-stv-cmd-item.prd-stv-remove {
+  pointer-events: none;
+  animation: prd-stv-fadeSlideOut 0.2s ease-in-out;
+}
+
+@keyframes prd-stv-fadeSlideOut {
+  0% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0;transform: translateX(-100px); }
+}
+
+/* Bounce (shake) animation for first delete press */
+.prd-stv-bounce {
+  animation: prd-stv-bounce 0.35s ease-in-out;
+}
+
+@keyframes prd-stv-bounce {
+  0%   { transform: translateX(0); }
+  50%  { transform: translateX(-4px); }
+  100% { transform: translateX(0); }
+}
+
+/* Toast */
+#prd-stv-toast {
+  position: absolute;
+  bottom: 48px;
+  height: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--toast-bg);
+  color: var(--container-text);
+  padding: 10px 18px;
+  border-radius: 15px;
+  font-size: 14px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  z-index: 2147483647;
+  animation: prd-stv-fadeIn 0.2s ease-out;
+}
+
+#prd-stv-status-bar {
+  justify-self: center;
+  padding-top: 8px;
+  color: var(--status-text);
+  font-size: small;
+  transition: color 0.3s ease-in-out;
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+}
+
+#prd-stv-status-message.confirm {
+  color: var(--status-confirm);
+}
+
+#prd-stv-tab-counter {
+  padding: 0 4px;
+}
+
+.prd-stv-tab-count-update {
+  animation: prd-stv-tabCountUpdate 0.3s ease-out;
+}
+
+@keyframes prd-stv-tabCountUpdate {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* 3-dots menu styles for command bar overlay */
+.prd-stv-item-controls {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.prd-stv-cmd-item:hover .prd-stv-item-controls {
+  opacity: 1;
+  display: flex;
+}
+
+.prd-stv-menu-btn {
+  background: transparent;
+  border: none;
+  color: #9b9b9b;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.prd-stv-menu-btn:hover {
+  background: var(--menu-btn-hover-bg);
+  color: var(--input-text);
+}
+
+/* Folder header hover effects */
+.bm-folder-header {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border-radius: 15px;
+  transition: background 0.2s ease;
+}
+
+.bm-folder-header:hover {
+  background: var(--item-hover-bg);
+}
+
+.bm-folder-header:hover .prd-stv-item-controls {
+  opacity: 1;
+}

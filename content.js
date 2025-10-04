@@ -25,6 +25,8 @@ const messageService = {
 
 // UI State Manager for better organization
 const uiState = {
+  shadowHost: null,
+  shadowRoot: null,
   overlay: null,
   input: null,
   listEl: null,
@@ -100,6 +102,39 @@ function createOverlay() {
     lastConfirmIdx = uiState.lastConfirmIdx;
     confirmTimer = uiState.confirmTimer;
     idleTimer = uiState.idleTimer;
+
+    // Create shadow host
+    uiState.shadowHost = document.createElement('div');
+    uiState.shadowHost.id = 'prd-stv-cmd-bar-host';
+
+    // Attach shadow root with open mode for debugging, closed mode for production
+    uiState.shadowRoot = uiState.shadowHost.attachShadow({ mode: 'open' });
+
+    // Load CSS into shadow DOM
+    const styleElement = document.createElement('style');
+    fetch(chrome.runtime.getURL('shadow-overlay.css'))
+      .then(response => response.text())
+      .then(css => {
+        styleElement.textContent = css;
+        uiState.shadowRoot.appendChild(styleElement);
+      })
+      .catch(err => {
+        console.error('Failed to load shadow-overlay.css:', err);
+        // Fallback: use inline styles if CSS file fails to load
+        styleElement.textContent = `
+          :host { display: block; }
+          #prd-stv-cmd-bar-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.3);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 2147483647;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          }
+        `;
+        uiState.shadowRoot.appendChild(styleElement);
+      });
+
+    // Create overlay inside shadow DOM
     uiState.overlay = document.createElement('div');
     uiState.overlay.id = 'prd-stv-cmd-bar-overlay';
 
@@ -116,31 +151,31 @@ function createOverlay() {
 
     uiState.statusBar = document.createElement('div');
     uiState.statusBar.id = 'prd-stv-status-bar';
-    
+
     // Create tab counter container
     const tabCounterContainer = document.createElement('div');
     tabCounterContainer.style.display = 'flex';
     tabCounterContainer.style.alignItems = 'center';
     tabCounterContainer.style.marginRight = '8px';
-    
+
     // Create tab counter element
     const tabCounter = document.createElement('span');
     tabCounter.id = 'prd-stv-tab-counter';
     tabCounter.textContent = '0';
-    
+
     tabCounterContainer.appendChild(tabCounter);
     tabCounterContainer.appendChild(document.createTextNode(' tabs'));
-    
+
     // Create status message element
     const statusMessage = document.createElement('span');
     statusMessage.id = 'prd-stv-status-message';
     statusMessage.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
-    
+
     uiState.statusBar.appendChild(tabCounterContainer);
     uiState.statusBar.appendChild(statusMessage);
     uiState.statusBar.style.display = 'flex';
     uiState.statusBar.style.alignItems = 'center';
-    
+
     // Update legacy references
     overlay = uiState.overlay;
     input = uiState.input;
@@ -161,7 +196,11 @@ function createOverlay() {
     // Prevent clicks inside the container from bubbling to overlay handler
     container.addEventListener('mousedown', (ev) => ev.stopPropagation());
 
-    document.body.appendChild(uiState.overlay);
+    // Append overlay to shadow root instead of document body
+    uiState.shadowRoot.appendChild(uiState.overlay);
+
+    // Append shadow host to document body
+    document.body.appendChild(uiState.shadowHost);
 
     // listeners
     uiState.input.addEventListener('keydown', onKeyDown);
@@ -177,7 +216,7 @@ function createOverlay() {
       selectedIdx = uiState.selectedIdx;
       renderList();
     });
-    
+
     // Get initial tab count
     updateTabCount();
   }
@@ -186,7 +225,9 @@ function createOverlay() {
     cancelAutoOpen();
     document.removeEventListener('keydown', onGlobalKeyDown);
     document.removeEventListener('keyup', onGlobalKeyUp);
-    uiState.overlay?.remove();
+    uiState.shadowHost?.remove();
+    uiState.shadowHost = null;
+    uiState.shadowRoot = null;
     uiState.overlay = null;
     overlay = null;
   }
@@ -215,6 +256,7 @@ function onGlobalKeyDown(e) {
   }
 
   function onKeyDown(e) {
+    e.stopPropagation(); // Prevent event from bubbling to document listener
     handleKey(e);
   }
 
@@ -414,7 +456,7 @@ function hideDeleteConfirm() {
       uiState.confirmTimer = null;
       confirmTimer = null;
     }
-    const statusMessage = document.getElementById('prd-stv-status-message');
+    const statusMessage = uiState.shadowRoot?.getElementById('prd-stv-status-message');
     if (statusMessage) {
       statusMessage.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
       statusMessage.classList.remove('confirm');
@@ -435,9 +477,9 @@ function removeProgressBars() {
   }
 
 function showDeleteConfirm() {
-    const statusMessage = document.getElementById('prd-stv-status-message');
+    const statusMessage = uiState.shadowRoot?.getElementById('prd-stv-status-message');
     if (!statusMessage) return;
-    
+
     statusMessage.textContent = 'Press backspace again to confirm';
     statusMessage.classList.add('confirm');
 
@@ -579,12 +621,16 @@ function getIconHtml(it) {
   }
 
 function showToast(message, duration = 2000) {
-    const existing = document.getElementById('prd-stv-toast');
+    const existing = uiState.shadowRoot?.getElementById('prd-stv-toast');
     existing?.remove();
     const div = document.createElement('div');
     div.id = 'prd-stv-toast';
     div.textContent = message;
-    document.body.appendChild(div);
+    if (uiState.shadowRoot) {
+      uiState.shadowRoot.appendChild(div);
+    } else {
+      document.body.appendChild(div);
+    }
     setTimeout(() => div.remove(), duration);
   }
 
@@ -659,12 +705,12 @@ function showToast(message, duration = 2000) {
         console.error('Error getting tab count:', chrome.runtime.lastError);
         return;
       }
-      
-      const tabCounter = document.getElementById('prd-stv-tab-counter');
+
+      const tabCounter = uiState.shadowRoot?.getElementById('prd-stv-tab-counter');
       if (tabCounter && response && response.count !== undefined) {
         const oldCount = parseInt(tabCounter.textContent) || 0;
         const newCount = response.count;
-        
+
         // Update the counter with animation if the count changed
         if (oldCount !== newCount) {
           tabCounter.textContent = newCount;
@@ -681,7 +727,7 @@ function showToast(message, duration = 2000) {
   function showBookmarkContextMenu(event, bookmark, itemElement) {
     // Remove any existing context menu
     closeBookmarkContextMenu();
-    
+
     // Create context menu
     const contextMenu = document.createElement('div');
     contextMenu.id = 'prd-stv-bookmark-context-menu';
@@ -696,7 +742,7 @@ function showToast(message, duration = 2000) {
       z-index: 2147483648;
       animation: contextMenuIn 0.15s ease-out;
     `;
-    
+
     contextMenu.innerHTML = `
       <div class="context-item" data-action="rename" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
         <span>Rename</span>
@@ -705,8 +751,8 @@ function showToast(message, duration = 2000) {
         <span>Move to...</span>
       </div>
     `;
-    
-    // Add hover styles
+
+    // Add hover styles to shadow root if available
     const style = document.createElement('style');
     style.textContent = `
       @keyframes contextMenuIn {
@@ -717,16 +763,24 @@ function showToast(message, duration = 2000) {
         background: #353535 !important;
       }
     `;
-    document.head.appendChild(style);
-    
+    if (uiState.shadowRoot) {
+      uiState.shadowRoot.appendChild(style);
+    } else {
+      document.head.appendChild(style);
+    }
+
     // Position the menu relative to the clicked button
     const buttonRect = event.target.getBoundingClientRect();
     contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
     contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
-    
-    // Add to document
-    document.body.appendChild(contextMenu);
-    
+
+    // Add to shadow root if available
+    if (uiState.shadowRoot) {
+      uiState.shadowRoot.appendChild(contextMenu);
+    } else {
+      document.body.appendChild(contextMenu);
+    }
+
     // Handle menu item clicks
     contextMenu.addEventListener('click', (e) => {
       const action = e.target.closest('.context-item')?.dataset.action;
@@ -737,7 +791,7 @@ function showToast(message, duration = 2000) {
       }
       closeBookmarkContextMenu();
     });
-    
+
     // Close menu when clicking outside
     setTimeout(() => {
       document.addEventListener('click', closeBookmarkContextMenu, { once: true });
@@ -745,7 +799,7 @@ function showToast(message, duration = 2000) {
   }
 
   function closeBookmarkContextMenu() {
-    const existingMenu = document.getElementById('prd-stv-bookmark-context-menu');
+    const existingMenu = uiState.shadowRoot?.getElementById('prd-stv-bookmark-context-menu') || document.getElementById('prd-stv-bookmark-context-menu');
     if (existingMenu) {
       existingMenu.remove();
     }
@@ -814,7 +868,7 @@ function showToast(message, duration = 2000) {
   function showTabContextMenu(event, tab, itemElement) {
     // Remove any existing context menu
     closeTabContextMenu();
-    
+
     // Create context menu
     const contextMenu = document.createElement('div');
     contextMenu.id = 'prd-stv-tab-context-menu';
@@ -829,7 +883,7 @@ function showToast(message, duration = 2000) {
       z-index: 2147483648;
       animation: contextMenuIn 0.15s ease-out;
     `;
-    
+
     contextMenu.innerHTML = `
       <div class="context-item" data-action="move-to-folder" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
         <span>Move to...</span>
@@ -838,8 +892,8 @@ function showToast(message, duration = 2000) {
         <span>Duplicate Tab</span>
       </div>
     `;
-    
-    // Add hover styles
+
+    // Add hover styles to shadow root if available
     const style = document.createElement('style');
     style.textContent = `
       @keyframes contextMenuIn {
@@ -850,16 +904,24 @@ function showToast(message, duration = 2000) {
         background: #353535 !important;
       }
     `;
-    document.head.appendChild(style);
-    
+    if (uiState.shadowRoot) {
+      uiState.shadowRoot.appendChild(style);
+    } else {
+      document.head.appendChild(style);
+    }
+
     // Position the menu relative to the clicked button
     const buttonRect = event.target.getBoundingClientRect();
     contextMenu.style.left = `${buttonRect.left - 120}px`; // Position to the left of button
     contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
-    
-    // Add to document
-    document.body.appendChild(contextMenu);
-    
+
+    // Add to shadow root if available
+    if (uiState.shadowRoot) {
+      uiState.shadowRoot.appendChild(contextMenu);
+    } else {
+      document.body.appendChild(contextMenu);
+    }
+
     // Handle menu item clicks
     contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.context-item')?.dataset.action;
@@ -878,7 +940,7 @@ function showToast(message, duration = 2000) {
       }
       closeTabContextMenu();
     });
-    
+
     // Close menu when clicking outside
     setTimeout(() => {
       document.addEventListener('click', closeTabContextMenu, { once: true });
@@ -886,7 +948,7 @@ function showToast(message, duration = 2000) {
   }
 
   function closeTabContextMenu() {
-    const existingMenu = document.getElementById('prd-stv-tab-context-menu');
+    const existingMenu = uiState.shadowRoot?.getElementById('prd-stv-tab-context-menu') || document.getElementById('prd-stv-tab-context-menu');
     if (existingMenu) {
       existingMenu.remove();
     }
