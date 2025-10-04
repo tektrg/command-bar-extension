@@ -75,10 +75,6 @@ const uiState = {
       const aTime = getLastVisited(a);
       const bTime = getLastVisited(b);
       
-      // Debug logging - remove after testing
-      if (console && console.log) {
-        console.log(`Sorting: ${a.title} (${aTime}) vs ${b.title} (${bTime})`);
-      }
       
       // Sort in descending order (most recent first)
       return bTime - aTime;
@@ -256,8 +252,12 @@ function onGlobalKeyDown(e) {
   }
 
   function onKeyDown(e) {
-    e.stopPropagation(); // Prevent event from bubbling to document listener
-    handleKey(e);
+    // Don't stop propagation for normal input behavior (backspace, typing, etc.)
+    // Only stop propagation if we're actually handling the key
+    const handled = handleKey(e);
+    if (handled) {
+      e.stopPropagation();
+    }
   }
 
   // Key handler functions - Split for better SRP compliance
@@ -329,10 +329,18 @@ function onGlobalKeyDown(e) {
     },
     
     deletion: (e) => {
-      if (e.key !== 'Backspace' || (document.activeElement === input && input.value !== '')) {
+      if (e.key !== 'Backspace') {
         return false;
       }
-      
+
+      // Check shadow root's active element since we're using Shadow DOM
+      const shadowActiveElement = uiState.shadowRoot?.activeElement;
+
+      // Allow normal backspace behavior when input is focused and has text
+      if (shadowActiveElement === input && input.value !== '') {
+        return false; // Don't handle - allow default backspace behavior
+      }
+
       e.preventDefault();
       const item = items[selectedIdx];
       if (!item) return true;
@@ -400,18 +408,20 @@ function onGlobalKeyDown(e) {
     // Always allow Esc to close the palette
     if (e.key === 'Escape') {
       keyHandlers.escape();
-      return;
+      return true;
     }
 
     // Ignore all other keys if the palette isn't open
-    if (!overlay) return;
+    if (!overlay) return false;
 
-    // Try each handler in order
-    if (keyHandlers.navigation(e)) return;
-    if (keyHandlers.metaNavigation(e)) return;
-    if (keyHandlers.copy(e)) return;
-    if (keyHandlers.deletion(e)) return;
-    if (keyHandlers.activation(e)) return;
+    // Try each handler in order - return true if handled, false otherwise
+    if (keyHandlers.navigation(e)) return true;
+    if (keyHandlers.metaNavigation(e)) return true;
+    if (keyHandlers.copy(e)) return true;
+    if (keyHandlers.deletion(e)) return true;
+    if (keyHandlers.activation(e)) return true;
+
+    return false; // Key not handled, allow default behavior
   }
 
   function handleKeyUp(e) {
@@ -502,9 +512,10 @@ function showDeleteConfirm() {
   // Extracted item rendering logic for better modularity
   function createItemElement(item, index) {
     const div = document.createElement('div');
-    div.className = 'prd-stv-cmd-item' + (index === selectedIdx ? ' prd-stv-active' : '');
+    const isHistory = item.type === 'history' || item.source === 'history';
+    div.className = 'prd-stv-cmd-item' + (index === selectedIdx ? ' prd-stv-active' : '') + (isHistory ? ' prd-stv-history-item' : '');
     div.dataset.idx = index;
-    
+
     const iconHtml = getIconHtml(item);
     
     // Add 3-dots menu for bookmarks and tabs
