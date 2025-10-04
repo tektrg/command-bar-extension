@@ -140,7 +140,7 @@ async function search(query) {
     url: h.url,
     source: "history",
     icon: '',
-    lastVisitTime: h.lastVisitTime,
+    lastVisitTime: h.lastVisitTime || 0,
     type: 'history'
   }));
 
