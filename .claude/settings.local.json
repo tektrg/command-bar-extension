@@ -15,7 +15,7 @@
       "Bash(node:*)",
       "Read(/Users/trungluong/**)",
       "Bash(find:*)",
-      "Read(//Users/trungluong/**)"
+      "Bash(kill:*)"
     ],
     "deny": []
   }
