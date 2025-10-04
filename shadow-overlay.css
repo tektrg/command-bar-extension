@@ -107,6 +107,11 @@
   background: var(--item-active-bg);
 }
 
+/* Dim history items to make tabs and bookmarks more prominent */
+.prd-stv-cmd-item.prd-stv-history-item {
+  opacity: 0.6;
+}
+
 .prd-stv-cmd-item .prd-stv-url {
   font-size: 12px;
   color: var(--url-text);
