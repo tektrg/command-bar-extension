@@ -1,3 +1,4 @@
+This fork will be synced every Saturday at 8:00 PM America/Chicago time until Anthropic closes the originating source code. When this happens, this repository will be archived in its entirety. 
 # Command Bar Extension
 
 A minimal command bar browser extension, inspired by the Arc browser's Cmd+P functionality. This extension provides quick access to your tabs, bookmarks, and browsing history through a convenient command interface.
