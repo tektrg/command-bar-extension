@@ -531,9 +531,9 @@ function showDeleteConfirm() {
     div.innerHTML = `
       <div style="display:flex;align-items:center;width:100%;">
         ${iconHtml}
-        <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
-          <span>${highlightMatches(item.title || item.url, input?.value.trim())}</span>
-          <span class="prd-stv-url">${getSubtitle(item)}</span>
+        <div style="display:flex;flex-direction:row; gap: 5px;flex:1;min-width:0;">
+          <span style="text-overflow: ellipsis;white-space: nowrap;overflow: hidden;">${highlightMatches(item.title || item.url, input?.value.trim())}</span>
+          <span class="prd-stv-url" style="text-overflow: ellipsis;white-space: nowrap;overflow: hidden;">${getSubtitle(item)}</span>
         </div>
         ${controlsHtml}
       </div>
