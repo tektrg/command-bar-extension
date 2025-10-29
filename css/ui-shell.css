@@ -857,3 +857,83 @@ img.prd-stv-favicon {
   background: #ff5252;
   border-color: #ff5252;
 }
+
+
+/* ===== PINNED TABS STYLES ===== */
+.prd-stv-pinned-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 48px);
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.prd-stv-pinned-tabs:empty {
+  display: none;
+}
+
+.pinned-tab-icon {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: #2a2a2a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  border: 1px solid transparent;
+}
+
+.pinned-tab-icon:hover {
+  background: #353535;
+  border-color: #4a4a4a;
+  transform: translateY(-1px);
+}
+
+.pinned-tab-icon.pinned-tab-active {
+  border-color: #b9a079;
+  box-shadow: 0 0 0 1px #b9a079;
+}
+
+.pinned-tab-icon.pinned-tab-inactive {
+  opacity: 0.6;
+}
+
+.pinned-tab-favicon {
+  width: 32px;
+  height: 32px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+}
+
+.pinned-tab-action {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.pinned-tab-icon:hover .pinned-tab-action {
+  opacity: 1;
+}
+
+.pinned-tab-action:hover {
+  background: rgba(255, 0, 0, 0.8);
+}

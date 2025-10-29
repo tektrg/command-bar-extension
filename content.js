@@ -31,6 +31,8 @@ const uiState = {
   input: null,
   listEl: null,
   statusBar: null,
+  pinnedTabsEl: null,
+  pinnedTabs: [],
   items: [],
   selectedIdx: -1,
   idleTimer: null,
@@ -178,10 +180,20 @@ function createOverlay() {
     listEl = uiState.listEl;
     statusBar = uiState.statusBar;
 
+    // Create pinned tabs container (same as sidepanel)
+    uiState.pinnedTabsEl = document.createElement('div');
+    uiState.pinnedTabsEl.id = 'pinned-tabs-container';
+    uiState.pinnedTabsEl.className = 'prd-stv-pinned-tabs';
+    uiState.pinnedTabsEl.style.cssText = 'display:none;';
+
     container.appendChild(uiState.input);
+    container.appendChild(uiState.pinnedTabsEl);
     container.appendChild(uiState.listEl);
     container.appendChild(uiState.statusBar);
     uiState.overlay.appendChild(container);
+
+    // Load and render pinned tabs
+    loadPinnedTabs();
 
     // Close overlay when user clicks outside the container
     uiState.overlay.addEventListener('mousedown', (ev) => {
@@ -927,6 +939,9 @@ function showToast(message, duration = 2000) {
     `;
 
     contextMenu.innerHTML = `
+      <div class="context-item" data-action="pin" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
+        <span>Pin Tab</span>
+      </div>
       <div class="context-item" data-action="move-to-folder" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
         <span>Move to...</span>
       </div>
@@ -967,7 +982,9 @@ function showToast(message, duration = 2000) {
     // Handle menu item clicks
     contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.context-item')?.dataset.action;
-      if (action === 'move-to-folder') {
+      if (action === 'pin') {
+        await handlePinTab(tab);
+      } else if (action === 'move-to-folder') {
         // Create a fake bookmark object to reuse the existing move dialog
         const fakeBookmark = {
           id: `tab_${tab.id}`,
@@ -1038,11 +1055,145 @@ function showToast(message, duration = 2000) {
     }
   }
 
+  async function handlePinTab(tab) {
+    try {
+      const tabData = {
+        url: tab.url,
+        title: tab.title || 'Untitled',
+        favicon: tab.icon || tab.favIconUrl || ''
+      };
+      
+      const response = await chrome.runtime.sendMessage({ 
+        type: 'ADD_PINNED_TAB', 
+        tabData 
+      });
+      
+      if (response && response.success) {
+        showToast('Tab pinned');
+        loadPinnedTabs();
+      } else {
+        throw new Error(response?.error || 'Failed to pin tab');
+      }
+    } catch (error) {
+      console.error('Failed to pin tab:', error);
+      showToast(error.message || 'Failed to pin tab');
+    }
+  }
+
+  // Pinned Tabs Functions
+  async function loadPinnedTabs() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_PINNED_TABS' });
+      if (response && response.pinnedTabs) {
+        renderPinnedTabs(response.pinnedTabs);
+      }
+    } catch (error) {
+      console.error('Failed to load pinned tabs:', error);
+    }
+  }
+
+  function renderPinnedTabs(pinnedTabs) {
+    if (!uiState.pinnedTabsEl) return;
+
+    if (!pinnedTabs || pinnedTabs.length === 0) {
+      uiState.pinnedTabsEl.style.display = 'none';
+      return;
+    }
+
+    // Use same display style as sidepanel
+    uiState.pinnedTabsEl.style.display = 'grid';
+    uiState.pinnedTabsEl.innerHTML = '';
+
+    pinnedTabs.forEach(pinnedTab => {
+      // Create icon element with same class as sidepanel
+      const tabIcon = document.createElement('div');
+      tabIcon.className = 'pinned-tab-icon';
+      tabIcon.dataset.url = pinnedTab.url;
+      tabIcon.title = pinnedTab.title;
+
+      // Add active/inactive state classes (same as sidepanel)
+      if (pinnedTab.isActive) {
+        tabIcon.classList.add('pinned-tab-active');
+      } else {
+        tabIcon.classList.add('pinned-tab-inactive');
+      }
+
+      // Create favicon with same class as sidepanel
+      const favicon = document.createElement('img');
+      favicon.className = 'pinned-tab-favicon';
+      favicon.src = pinnedTab.favicon || CONSTANTS.FALLBACK_ICON;
+      favicon.alt = pinnedTab.title;
+      favicon.onerror = () => {
+        favicon.src = CONSTANTS.FALLBACK_ICON;
+      };
+      tabIcon.appendChild(favicon);
+
+      // Create action button with same class as sidepanel
+      const btn = document.createElement('button');
+      btn.className = 'pinned-tab-action';
+      btn.innerHTML = pinnedTab.isActive ? '−' : '×';
+      btn.title = pinnedTab.isActive ? 'Close tab' : 'Remove from pinned';
+
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          if (pinnedTab.isActive && pinnedTab.tabId) {
+            // Close active tab
+            await chrome.runtime.sendMessage({ 
+              type: 'CLOSE_PINNED_TAB', 
+              tabId: pinnedTab.tabId 
+            });
+          } else {
+            // Remove pinned tab
+            await chrome.runtime.sendMessage({ 
+              type: 'REMOVE_PINNED_TAB', 
+              url: pinnedTab.url 
+            });
+          }
+          // Reload pinned tabs
+          loadPinnedTabs();
+        } catch (error) {
+          console.error('Failed to handle pinned tab action:', error);
+        }
+      };
+      tabIcon.appendChild(btn);
+
+      // Click on icon to open/activate (not on button)
+      tabIcon.onclick = async (e) => {
+        if (e.target === btn) return; // Don't trigger when clicking button
+        
+        try {
+          if (pinnedTab.isActive && pinnedTab.tabId) {
+            // Activate existing tab
+            await chrome.runtime.sendMessage({ 
+              type: 'ACTIVATE_TAB', 
+              tabId: pinnedTab.tabId 
+            });
+            destroyOverlay();
+          } else {
+            // Open new tab
+            await chrome.runtime.sendMessage({ 
+              type: 'OPEN_PINNED_TAB', 
+              url: pinnedTab.url 
+            });
+            destroyOverlay();
+          }
+        } catch (error) {
+          console.error('Failed to open pinned tab:', error);
+        }
+      };
+
+      uiState.pinnedTabsEl.appendChild(tabIcon);
+    });
+  }
+
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'TOGGLE') {
       toggleOverlay();
     } else if (msg.type === 'TAB_COUNT_CHANGED') {
       updateTabCount();
+    } else if (msg.type === 'PINNED_TABS_UPDATED') {
+      loadPinnedTabs();
     }
   });
 })();

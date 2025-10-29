@@ -2,6 +2,23 @@
 // Track tabs where we've already inserted CSS to avoid duplicates
 const cssInjectedTabs = new Set();
 
+// Import auto-pin sync module
+importScripts('js/autoPinSync.js');
+
+// Initialize auto-pin sync on extension startup
+chrome.runtime.onStartup.addListener(() => {
+  if (self.autoPinSync) {
+    self.autoPinSync.init();
+  }
+});
+
+// Also initialize on extension install
+chrome.runtime.onInstalled.addListener(() => {
+  if (self.autoPinSync) {
+    self.autoPinSync.init();
+  }
+});
+
 async function toggleCommandBar() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
@@ -241,6 +258,118 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       } else {
         sendResponse({ success: true, result });
       }
+    });
+    return true; // async
+  } else if (msg.type === "GET_PINNED_TABS") {
+    // Get pinned tabs with their active status
+    chrome.storage.local.get('pinnedTabs', async (result) => {
+      const pinnedTabs = result.pinnedTabs || [];
+      const openTabs = await chrome.tabs.query({});
+      
+      const pinnedTabsWithStatus = pinnedTabs.map(pinnedTab => {
+        const activeTab = openTabs.find(tab => tab.url === pinnedTab.url);
+        return {
+          ...pinnedTab,
+          isActive: !!activeTab,
+          tabId: activeTab?.id || null,
+          favicon: activeTab?.favIconUrl || pinnedTab.favicon
+        };
+      });
+      
+      sendResponse({ success: true, pinnedTabs: pinnedTabsWithStatus });
+    });
+    return true; // async
+  } else if (msg.type === "ADD_PINNED_TAB") {
+    const { tabData } = msg;
+    chrome.storage.local.get('pinnedTabs', (result) => {
+      const pinnedTabs = result.pinnedTabs || [];
+      
+      // Check if already pinned
+      if (pinnedTabs.some(pt => pt.url === tabData.url)) {
+        sendResponse({ success: false, error: 'Already pinned' });
+        return;
+      }
+      
+      // Check max limit (9 tabs)
+      if (pinnedTabs.length >= 9) {
+        sendResponse({ success: false, error: 'Maximum 9 pinned tabs reached' });
+        return;
+      }
+      
+      // Add new pinned tab
+      const newPinnedTab = {
+        url: tabData.url,
+        title: tabData.title || 'Untitled',
+        favicon: tabData.favicon || '',
+        isPinned: true,
+        pinnedAt: Date.now()
+      };
+      
+      pinnedTabs.push(newPinnedTab);
+      chrome.storage.local.set({ pinnedTabs }, () => {
+        // Notify all tabs about update
+        chrome.tabs.query({}, (tabs) => {
+          tabs.forEach(t => {
+            if (t.id) {
+              chrome.tabs.sendMessage(t.id, { type: 'PINNED_TABS_UPDATED' }).catch(() => {});
+            }
+          });
+        });
+        
+        sendResponse({ success: true });
+      });
+    });
+    return true; // async
+  } else if (msg.type === "REMOVE_PINNED_TAB") {
+    const { url } = msg;
+    chrome.storage.local.get('pinnedTabs', (result) => {
+      const pinnedTabs = result.pinnedTabs || [];
+      const filtered = pinnedTabs.filter(pt => pt.url !== url);
+      
+      if (filtered.length === pinnedTabs.length) {
+        sendResponse({ success: false, error: 'Not found' });
+        return;
+      }
+      
+      chrome.storage.local.set({ pinnedTabs: filtered }, () => {
+        // Notify all tabs about the update
+        chrome.tabs.query({}, (tabs) => {
+          tabs.forEach(t => {
+            if (t.id) {
+              chrome.tabs.sendMessage(t.id, { type: 'PINNED_TABS_UPDATED' }).catch(() => {});
+            }
+          });
+        });
+        
+        sendResponse({ success: true });
+      });
+    });
+    return true; // async
+  } else if (msg.type === "CLOSE_PINNED_TAB") {
+    const { tabId } = msg;
+    chrome.tabs.remove(tabId, () => {
+      sendResponse({ success: true });
+    });
+    return true; // async
+  } else if (msg.type === "OPEN_PINNED_TAB") {
+    const { url } = msg;
+    chrome.tabs.create({ url, active: true, pinned: true }, (tab) => {
+      if (chrome.runtime.lastError) {
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+      } else {
+        sendResponse({ success: true, tabId: tab.id });
+      }
+    });
+    return true; // async
+  } else if (msg.type === "ACTIVATE_TAB") {
+    const { tabId } = msg;
+    chrome.tabs.update(tabId, { active: true }, (tab) => {
+      if (chrome.runtime.lastError || !tab) {
+        sendResponse({ success: false });
+        return;
+      }
+      chrome.windows.update(tab.windowId, { focused: true });
+      sendResponse({ success: true });
     });
     return true; // async
   }

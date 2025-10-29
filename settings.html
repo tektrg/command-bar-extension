@@ -1,0 +1,95 @@
+<!-- settings.html - Settings page for pinned tabs -->
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pinned Tabs Settings</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #1e1e1e;
+        color: #e0e0e0;
+        padding: 24px;
+        min-width: 400px;
+      }
+
+      h1 {
+        font-size: 24px;
+        margin-bottom: 24px;
+        color: #f5f5f5;
+      }
+
+      .setting-section {
+        background: #2a2a2a;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+
+      .setting-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+
+      .setting-row:last-child {
+        margin-bottom: 0;
+      }
+
+      .setting-label {
+        font-size: 14px;
+        color: #e0e0e0;
+        flex: 1;
+      }
+
+      .setting-description {
+        font-size: 12px;
+        color: #9e9e9e;
+        margin-top: 4px;
+      }
+
+      .toggle-switch {
+        position: relative;
+        width: 48px;
+        height: 24px;
+        background: #3a3a3a;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: background 0.3s;
+      }
+
+      .toggle-switch.active {
+        background: #6ba3e8;
+      }
+
+      .toggle-switch::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        transition: transform 0.3s;
+      }
+
+      .toggle-switch.active::after {
+        transform: translateX(24px);
+      }
+
+      .sync-button {
+        background: #6ba3e8;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 14px;

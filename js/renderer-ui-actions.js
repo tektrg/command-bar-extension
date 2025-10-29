@@ -112,6 +112,9 @@ const rendererUIActions = {
     const contextMenu = document.createElement('div');
     contextMenu.className = 'prd-stv-context-menu';
     contextMenu.innerHTML = `
+      <div class="prd-stv-context-item" data-action="pin">
+        <span>Pin Tab</span>
+      </div>
       <div class="prd-stv-context-item" data-action="move-to-folder">
         <span>Move to...</span>
       </div>
@@ -128,9 +131,29 @@ const rendererUIActions = {
 
     document.body.appendChild(contextMenu);
 
-    contextMenu.addEventListener('click', (e) => {
+    contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-      if (action === 'move-to-folder') {
+      if (action === 'pin') {
+        try {
+          const tabData = {
+            url: tab.url,
+            title: tab.title || 'Untitled',
+            favicon: tab.favIconUrl || ''
+          };
+          const response = await chrome.runtime.sendMessage({ 
+            type: 'ADD_PINNED_TAB', 
+            tabData 
+          });
+          if (response && response.success) {
+            window.utils.showToast('Tab pinned');
+          } else {
+            throw new Error(response?.error || 'Failed to pin tab');
+          }
+        } catch (error) {
+          console.error('Failed to pin tab:', error);
+          window.utils.showToast(error.message || 'Failed to pin tab');
+        }
+      } else if (action === 'move-to-folder') {
         const fakeBookmark = {
           id: `tab_${tab.id}`,
           title: tab.title || 'Untitled',
