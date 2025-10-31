@@ -60,12 +60,28 @@ const uiState = {
   },
   
   setItems(newItems) {
-    this.items = this.sortItemsByLastVisited(newItems || []);
+        this.items = this.sortItems(newItems || []);
     this.selectedIdx = -1;
   },
   
-  sortItemsByLastVisited(items) {
+    sortItems(items) {
+    const typeOrder = {
+      'tab': 1,
+      'bookmark': 2,
+      'history': 3
+    };
+
     return items.sort((a, b) => {
+      const aType = a.type || a.source;
+      const bType = b.type || b.source;
+      
+      const aOrder = typeOrder[aType] || 4;
+      const bOrder = typeOrder[bType] || 4;
+
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+
       // Get last visited time for each item
       const getLastVisited = (item) => {
         if (item.lastAccessed) return item.lastAccessed; // tabs
@@ -104,6 +120,13 @@ function createOverlay() {
     // Create shadow host
     uiState.shadowHost = document.createElement('div');
     uiState.shadowHost.id = 'prd-stv-cmd-bar-host';
+    // Prevent layout shift by positioning the host element itself
+    uiState.shadowHost.style.position = 'fixed';
+    uiState.shadowHost.style.top = '0';
+    uiState.shadowHost.style.left = '0';
+    uiState.shadowHost.style.zIndex = '2147483647';
+    uiState.shadowHost.style.opacity = '0';
+    uiState.shadowHost.style.transition = 'opacity 0.05s ease-in-out';
 
     // Attach shadow root with open mode for debugging, closed mode for production
     uiState.shadowRoot = uiState.shadowHost.attachShadow({ mode: 'open' });
@@ -130,6 +153,11 @@ function createOverlay() {
           }
         `;
         uiState.shadowRoot.appendChild(styleElement);
+      })
+      .finally(() => {
+        if (uiState.shadowHost) {
+          uiState.shadowHost.style.opacity = '1';
+        }
       });
 
     // Create overlay inside shadow DOM
