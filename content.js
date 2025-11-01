@@ -243,7 +243,11 @@ function toggleOverlay() {
 
 function onGlobalKeyDown(e) {
     if (e.target === input) return; // already handled by onKeyDown
-    handleKey(e);
+    const handled = handleKey(e);
+    if (handled) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
   }
 
   function onGlobalKeyUp(e) {
@@ -252,8 +256,26 @@ function onGlobalKeyDown(e) {
   }
 
   function onKeyDown(e) {
-    // Don't stop propagation for normal input behavior (backspace, typing, etc.)
-    // Only stop propagation if we're actually handling the key
+    // If the input is focused and the key is a printable character, allow normal input behavior
+    if (e.target === input) {
+      // For printable keys, we allow default behavior but prevent propagation to the page
+      const isPrintableKey = e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
+      
+      if (isPrintableKey) {
+        // Allow the input to receive the character
+        e.stopPropagation();
+        return;
+      }
+      
+      // For special keys (arrows, enter, etc.) when input is focused, handle them specially
+      const handled = handleKey(e);
+      if (handled) {
+        e.stopPropagation();
+      }
+      return;
+    }
+    
+    // For keys when input is not focused, handle normally
     const handled = handleKey(e);
     if (handled) {
       e.stopPropagation();
@@ -414,6 +436,14 @@ function onGlobalKeyDown(e) {
     // Ignore all other keys if the palette isn't open
     if (!overlay) return false;
 
+    // If input is focused and it's a printable character, don't process with our handlers
+    if (e.target === input) {
+      const isPrintableKey = e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
+      if (isPrintableKey) {
+        return false; // Let the input handle printable characters normally
+      }
+    }
+
     // Try each handler in order - return true if handled, false otherwise
     if (keyHandlers.navigation(e)) return true;
     if (keyHandlers.metaNavigation(e)) return true;
@@ -437,6 +467,7 @@ function onGlobalKeyDown(e) {
   }
 
 function onInput(e) {
+    e.stopPropagation(); // Prevent the input event from affecting the page
     hideDeleteConfirm();
     // User is typing -> cancel pending auto open
     cancelAutoOpen();
@@ -531,9 +562,9 @@ function showDeleteConfirm() {
     div.innerHTML = `
       <div style="display:flex;align-items:center;width:100%;">
         ${iconHtml}
-        <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
-          <span>${highlightMatches(item.title || item.url, input?.value.trim())}</span>
-          <span class="prd-stv-url">${getSubtitle(item)}</span>
+        <div style="display:flex;flex-direction:row; gap: 5px;flex:1;min-width:0;">
+          <span style="text-overflow: ellipsis;white-space: nowrap;overflow: hidden;">${highlightMatches(item.title || item.url, input?.value.trim())}</span>
+          <span class="prd-stv-url" style="text-overflow: ellipsis;white-space: nowrap;overflow: hidden;">${getSubtitle(item)}</span>
         </div>
         ${controlsHtml}
       </div>
