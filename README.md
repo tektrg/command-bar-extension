@@ -1,4 +1,4 @@
-This fork will be synced daily and a new branch will be created every Saturday at 8:00 PM America/Chicago time until Anthropic closes the originating source code. When this happens, this repository will be archived in its entirety. 
+Forked and Archived 2025-11-1 10:42 PM America/Chicago Time
 # Command Bar Extension
 
 A minimal command bar browser extension, inspired by the Arc browser's Cmd+P functionality. This extension provides quick access to your tabs, bookmarks, and browsing history through a convenient command interface.
