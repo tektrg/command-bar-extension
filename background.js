@@ -32,11 +32,7 @@ async function toggleCommandBar() {
   try {
     // Insert CSS once per tab lifecycle
     if (tab.id && !cssInjectedTabs.has(tab.id)) {
-      await chrome.scripting.insertCSS({
-        target: { tabId: tab.id },
-        files: ["style.css"],
-      });
-      cssInjectedTabs.add(tab.id);
+
     }
 
     // Inject content script (idempotent due to in-script guard)
