@@ -405,8 +405,6 @@
       });
     }
     populateBookmarkMap(state.bookmarksRoots);
-    
-    applyBookmarkFilter();
   }
 
   // ----- Keyboard navigation helpers (sidepanel) -----
@@ -543,8 +541,6 @@
     [...active, ...inactive].forEach(tab => {
       state.itemMaps.tabs.set(tab.id, tab);
     });
-    
-    applyTabFilter();
   }
 
   function applyTabFilter() {
@@ -591,6 +587,8 @@
     await window.renderer.render(state, elements);
     // Reset selection for new result set
     resetSelection();
+    // Save search query to storage
+    await window.storage.saveSearchQuery(state.query);
   }, 200);
 
   // Utility function to count open bookmarks in a folder (one level only)
@@ -693,10 +691,24 @@
       window.storage.loadBookmarkTabLinks(state),
       window.storage.loadTabSortMode(state),
       window.storage.loadBookmarkViewMode(state),
-      reloadBookmarks(), 
+      window.storage.loadSearchQuery(state),
+      reloadBookmarks(),
       reloadTabs()
     ]);
-    
+
+    // Set input value to loaded search query
+    if (state.query && elements.input) {
+      elements.input.value = state.query;
+      // Select all text when loading a saved query
+      setTimeout(() => {
+        elements.input.select();
+      }, 50);
+    }
+
+    // Apply filters after all data is loaded
+    applyBookmarkFilter();
+    applyTabFilter();
+
     // Clean up any stale bookmark-tab relationships (tabs that no longer exist)
     await cleanupStaleBookmarkTabLinks();
     await window.renderer.render(state, elements);
@@ -707,6 +719,13 @@
     elements.input.addEventListener('input', toggleClearButton);
     // Reset selection when typing a new query
     elements.input.addEventListener('input', () => { resetSelection(); });
+
+    // Auto-select all text when input is focused
+    elements.input.addEventListener('focus', () => {
+      if (elements.input.value) {
+        elements.input.select();
+      }
+    });
 
     // Clear button functionality
     if (elements.clearButton) {

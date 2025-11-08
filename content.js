@@ -214,8 +214,8 @@ function createOverlay() {
     uiState.pinnedTabsEl.className = 'prd-stv-pinned-tabs';
     uiState.pinnedTabsEl.style.cssText = 'display:none;';
 
-    container.appendChild(uiState.input);
     container.appendChild(uiState.pinnedTabsEl);
+    container.appendChild(uiState.input);
     container.appendChild(uiState.listEl);
     container.appendChild(uiState.statusBar);
     uiState.overlay.appendChild(container);
@@ -362,8 +362,12 @@ function onGlobalKeyDown(e) {
       renderList();
       cancelAutoOpen();
 
-      // Blur input so backspace won't edit text
-      if (document.activeElement === input) input.blur();
+      // Blur input so backspace won't edit text - use requestAnimationFrame to ensure proper timing
+      requestAnimationFrame(() => {
+        if (document.activeElement === input) {
+          input.blur();
+        }
+      });
       return true;
     },
     
@@ -382,7 +386,11 @@ function onGlobalKeyDown(e) {
           selectedIdx = items.length - 1;
           renderList();
           cancelAutoOpen();
-          input.blur();
+          requestAnimationFrame(() => {
+            if (document.activeElement === input) {
+              input.blur();
+            }
+          });
         }
         return true;
       }
