@@ -2,7 +2,8 @@
 // Track tabs where we've already inserted CSS to avoid duplicates
 const cssInjectedTabs = new Set();
 
-// Import auto-pin sync module
+// Import modules for pinned tabs functionality
+importScripts('js/pinnedTabs.js');
 importScripts('js/autoPinSync.js');
 
 // Initialize auto-pin sync on extension startup
@@ -20,8 +21,14 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 async function toggleCommandBar() {
+  console.log('toggleCommandBar called');
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return;
+  if (!tab) {
+    console.warn('No active tab found');
+    return;
+  }
+
+  console.log('Active tab:', tab.url, 'ID:', tab.id);
 
   // Skip restricted URLs
   if (tab.url?.startsWith('chrome://') || tab.url?.startsWith('edge://') || tab.url?.startsWith('chrome-extension://')) {
@@ -30,18 +37,31 @@ async function toggleCommandBar() {
   }
 
   try {
+    console.log('Starting injection process...');
+
     // Insert CSS once per tab lifecycle
     if (tab.id && !cssInjectedTabs.has(tab.id)) {
-
+      console.log('Injecting CSS...');
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["shadow-overlay.css"]
+      });
+      cssInjectedTabs.add(tab.id);
+      console.log('CSS injected successfully');
     }
 
     // Inject content script (idempotent due to in-script guard)
+    console.log('Injecting content script...');
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       files: ["content.js"]
     });
+    console.log('Content script injected successfully');
+
     // toggle overlay
+    console.log('Sending TOGGLE message...');
     chrome.tabs.sendMessage(tab.id, { type: "TOGGLE" });
+    console.log('TOGGLE message sent');
   } catch (error) {
     console.error('Failed to inject content script or CSS:', error);
   }
@@ -257,89 +277,62 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true; // async
   } else if (msg.type === "GET_PINNED_TABS") {
-    // Get pinned tabs with their active status
-    chrome.storage.local.get('pinnedTabs', async (result) => {
-      const pinnedTabs = result.pinnedTabs || [];
-      const openTabs = await chrome.tabs.query({});
-      
-      const pinnedTabsWithStatus = pinnedTabs.map(pinnedTab => {
-        const activeTab = openTabs.find(tab => tab.url === pinnedTab.url);
-        return {
-          ...pinnedTab,
-          isActive: !!activeTab,
-          tabId: activeTab?.id || null,
-          favicon: activeTab?.favIconUrl || pinnedTab.favicon
-        };
-      });
-      
-      sendResponse({ success: true, pinnedTabs: pinnedTabsWithStatus });
-    });
+    // Get pinned tabs with their active status using centralized storage
+    if (typeof pinnedTabsModule !== 'undefined') {
+      (async () => {
+        try {
+          const pinnedTabsWithStatus = await pinnedTabsModule.getPinnedTabsWithStatus();
+          sendResponse({ success: true, pinnedTabs: pinnedTabsWithStatus });
+        } catch (error) {
+          console.error('Failed to get pinned tabs:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+    } else {
+      sendResponse({ success: false, error: 'Pinned tabs module not available' });
+    }
     return true; // async
   } else if (msg.type === "ADD_PINNED_TAB") {
     const { tabData } = msg;
-    chrome.storage.local.get('pinnedTabs', (result) => {
-      const pinnedTabs = result.pinnedTabs || [];
-      
-      // Check if already pinned
-      if (pinnedTabs.some(pt => pt.url === tabData.url)) {
-        sendResponse({ success: false, error: 'Already pinned' });
-        return;
-      }
-      
-      // Check max limit (9 tabs)
-      if (pinnedTabs.length >= 9) {
-        sendResponse({ success: false, error: 'Maximum 9 pinned tabs reached' });
-        return;
-      }
-      
-      // Add new pinned tab
-      const newPinnedTab = {
-        url: tabData.url,
-        title: tabData.title || 'Untitled',
-        favicon: tabData.favicon || '',
-        isPinned: true,
-        pinnedAt: Date.now()
-      };
-      
-      pinnedTabs.push(newPinnedTab);
-      chrome.storage.local.set({ pinnedTabs }, () => {
-        // Notify all tabs about update
-        chrome.tabs.query({}, (tabs) => {
-          tabs.forEach(t => {
-            if (t.id) {
-              chrome.tabs.sendMessage(t.id, { type: 'PINNED_TABS_UPDATED' }).catch(() => {});
-            }
-          });
-        });
-        
-        sendResponse({ success: true });
-      });
-    });
+    // Use centralized storage for adding pinned tabs
+    if (typeof pinnedTabsModule !== 'undefined') {
+      (async () => {
+        try {
+          const success = await pinnedTabsModule.addPinnedTab(tabData);
+          if (success) {
+            sendResponse({ success: true });
+          } else {
+            sendResponse({ success: false, error: 'Failed to add pinned tab (may already exist or limit reached)' });
+          }
+        } catch (error) {
+          console.error('Failed to add pinned tab:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+    } else {
+      sendResponse({ success: false, error: 'Pinned tabs module not available' });
+    }
     return true; // async
   } else if (msg.type === "REMOVE_PINNED_TAB") {
     const { url } = msg;
-    chrome.storage.local.get('pinnedTabs', (result) => {
-      const pinnedTabs = result.pinnedTabs || [];
-      const filtered = pinnedTabs.filter(pt => pt.url !== url);
-      
-      if (filtered.length === pinnedTabs.length) {
-        sendResponse({ success: false, error: 'Not found' });
-        return;
-      }
-      
-      chrome.storage.local.set({ pinnedTabs: filtered }, () => {
-        // Notify all tabs about the update
-        chrome.tabs.query({}, (tabs) => {
-          tabs.forEach(t => {
-            if (t.id) {
-              chrome.tabs.sendMessage(t.id, { type: 'PINNED_TABS_UPDATED' }).catch(() => {});
-            }
-          });
-        });
-        
-        sendResponse({ success: true });
-      });
-    });
+    // Use centralized storage for removing pinned tabs
+    if (typeof pinnedTabsModule !== 'undefined') {
+      (async () => {
+        try {
+          const success = await pinnedTabsModule.removePinnedTab(url);
+          if (success) {
+            sendResponse({ success: true });
+          } else {
+            sendResponse({ success: false, error: 'Pinned tab not found' });
+          }
+        } catch (error) {
+          console.error('Failed to remove pinned tab:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
+    } else {
+      sendResponse({ success: false, error: 'Pinned tabs module not available' });
+    }
     return true; // async
   } else if (msg.type === "CLOSE_PINNED_TAB") {
     const { tabId } = msg;
