@@ -409,7 +409,15 @@
 
   // ----- Keyboard navigation helpers (sidepanel) -----
   function getLinearItems() {
-    return Array.from(elements.combined.querySelectorAll('.prd-stv-cmd-item'));
+    const items = Array.from(elements.combined.querySelectorAll('.prd-stv-cmd-item'));
+    console.log('🔍 getLinearItems: elements.combined =', elements.combined);
+    console.log('🔍 getLinearItems: found .prd-stv-cmd-item elements =', items.length);
+    console.log('🔍 getLinearItems: items =', items.map(el => ({
+      class: el.className,
+      text: el.textContent?.substring(0, 30),
+      id: el.dataset.id
+    })));
+    return items;
   }
 
   function clearSelectionHighlight() {
@@ -426,12 +434,15 @@
   }
 
   function updateSelection(newIndex) {
+    console.log('🔍 updateSelection called with newIndex:', newIndex);
     const items = getLinearItems();
     newIndex = ensureIndexInRange(newIndex, items);
+    console.log('🔍 updateSelection: final newIndex after bounds check:', newIndex);
     clearSelectionHighlight();
     state.selectedIndex = newIndex;
     if (newIndex >= 0 && items[newIndex]) {
       const el = items[newIndex];
+      console.log('🔍 updateSelection: adding prd-stv-active to element:', el);
       el.classList.add('prd-stv-active');
       el.scrollIntoView({ block: 'nearest' });
     }
@@ -443,11 +454,14 @@
   }
 
   function handleNavigationKey(e) {
+    console.log('🔍 handleNavigationKey called:', e.key);
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return false;
     const items = getLinearItems();
+    console.log('🔍 getLinearItems returned:', items.length, 'items');
     if (!items.length) return true;
     e.preventDefault();
     const dir = e.key === 'ArrowDown' ? 1 : -1;
+    console.log('🔍 Navigation direction:', dir, 'current selectedIndex:', state.selectedIndex);
     if (state.selectedIndex === -1) {
       updateSelection(e.key === 'ArrowDown' ? 0 : items.length - 1);
     } else {
@@ -481,14 +495,20 @@
   }
 
   function attachKeyboardHandlers() {
+    console.log('🔍 attachKeyboardHandlers: attaching event listeners');
+    console.log('🔍 attachKeyboardHandlers: elements.input =', elements.input);
+    console.log('🔍 attachKeyboardHandlers: elements.combined =', elements.combined);
+
     // Input-focused navigation
     elements.input.addEventListener('keydown', (e) => {
+      console.log('🔍 keydown on input:', e.key);
       if (handleNavigationKey(e)) return;
       if (handleActivationKey(e)) return;
     });
 
     // Allow navigation when focus is within the list
     elements.combined.addEventListener('keydown', (e) => {
+      console.log('🔍 keydown on combined:', e.key);
       if (handleNavigationKey(e)) return;
       if (handleActivationKey(e)) return;
     });
@@ -501,6 +521,8 @@
       const idx = items.indexOf(item);
       if (idx !== -1) updateSelection(idx);
     });
+
+    console.log('🔍 attachKeyboardHandlers: event listeners attached successfully');
   }
 
   function applyBookmarkFilter() {
@@ -677,6 +699,13 @@
     elements.combined = resolveElement(config.listId);
     elements.clearButton = resolveElement('prd-stv-input-clear');
 
+    console.log('🔍 Element resolution results:');
+    console.log('🔍 - elements.input:', elements.input);
+    console.log('🔍 - elements.combined:', elements.combined);
+    console.log('🔍 - elements.clearButton:', elements.clearButton);
+    console.log('🔍 - config.inputId:', config.inputId);
+    console.log('🔍 - config.listId:', config.listId);
+
     if (!elements.input || !elements.combined) {
       console.warn('Command bar bootstrap: missing input or list element', config);
       return;
@@ -733,6 +762,7 @@
     }
 
     // Keyboard navigation bindings
+    console.log('🔍 About to call attachKeyboardHandlers');
     attachKeyboardHandlers();
 
     // Listen for storage changes to sync between windows
