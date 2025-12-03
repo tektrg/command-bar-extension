@@ -1,7 +1,12 @@
 // content.js
 (() => {
-  if (window.__cmdBarInjected) return;
+  console.log('Content script loading...');
+  if (window.__cmdBarInjected) {
+    console.log('Content script already injected, skipping');
+    return;
+  }
   window.__cmdBarInjected = true;
+  console.log('Content script injected successfully');
 
 // Constants
 const CONSTANTS = {
@@ -1224,7 +1229,9 @@ function showToast(message, duration = 2000) {
   }
 
   chrome.runtime.onMessage.addListener((msg) => {
+    console.log('Content script received message:', msg.type);
     if (msg.type === 'TOGGLE') {
+      console.log('Toggling overlay...');
       toggleOverlay();
     } else if (msg.type === 'TAB_COUNT_CHANGED') {
       updateTabCount();
