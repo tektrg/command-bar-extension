@@ -1,7 +1,22 @@
 // sidepanel-pinned-tabs.js - Pinned tabs UI for sidepanel
+// Enhanced with debouncing and improved race condition prevention
 (function () {
   let container = null;
   let isInitialized = false;
+  let renderDebounceTimer = null;
+
+  /**
+   * Debounced render to prevent rapid successive renders
+   */
+  function debouncedRender() {
+    if (renderDebounceTimer) {
+      clearTimeout(renderDebounceTimer);
+    }
+
+    renderDebounceTimer = setTimeout(() => {
+      renderPinnedTabs();
+    }, 100); // 100ms debounce
+  }
 
   /**
    * Wait for pinnedTabsModule to be available
@@ -15,19 +30,26 @@
         callback();
       } else if (attempts >= maxAttempts) {
         clearInterval(checkInterval);
-        console.error('pinnedTabsModule not available after max attempts');
+        console.error('[SidepanelPinnedTabs] pinnedTabsModule not available after max attempts');
       }
     }, 100);
   }
 
   /**
-   * Initialize pinned tabs in sidepanel
+   * Initialize pinned tabs in sidepanel with improved race condition prevention
    */
   function initPinnedTabs() {
-    if (isInitialized) return;
+    if (isInitialized) {
+      console.log('[SidepanelPinnedTabs] Already initialized, skipping...');
+      return;
+    }
+
+    console.log('[SidepanelPinnedTabs] Initializing pinned tabs...');
 
     // Wait for pinnedTabsModule to be loaded
     waitForModule(() => {
+      console.log('[SidepanelPinnedTabs] pinnedTabsModule available');
+
       // Wait for the root element to be rendered
       const checkRoot = setInterval(() => {
         const root = document.getElementById('prd-stv-sidepanel-root');
@@ -35,11 +57,21 @@
           clearInterval(checkRoot);
           container = root.querySelector('#pinned-tabs-container');
           if (container) {
+            console.log('[SidepanelPinnedTabs] Container found, initializing');
             isInitialized = true;
-            renderPinnedTabs();
             setupMessageListener();
+
+            // Initial render with a small delay to ensure everything is loaded
+            setTimeout(() => {
+              debouncedRender();
+            }, 200);
+
+            // NOTE: Removed REQUEST_PINNED_TABS_SYNC to prevent race conditions
+            // The autoPinSync module is already initialized in background and runs periodically
+            // Manual sync requests were causing duplicate pinned tabs to be added
+            console.log('[SidepanelPinnedTabs] Initialization complete - auto-sync will handle browser pinned tabs');
           } else {
-            console.warn('Pinned tabs container not found in DOM');
+            console.warn('[SidepanelPinnedTabs] Pinned tabs container not found in DOM');
           }
         }
       }, 100);
@@ -50,10 +82,17 @@
    * Render pinned tabs
    */
   async function renderPinnedTabs() {
-    if (!container || !window.pinnedTabsModule) return;
+    if (!container || !window.pinnedTabsModule) {
+      console.log('[SidepanelPinnedTabs] Cannot render: container or module not available', {
+        container: !!container,
+        module: !!window.pinnedTabsModule
+      });
+      return;
+    }
 
     try {
       const pinnedTabs = await window.pinnedTabsModule.getPinnedTabsWithStatus();
+      console.log('[SidepanelPinnedTabs] Rendering pinned tabs:', pinnedTabs.length, pinnedTabs);
 
       if (pinnedTabs.length === 0) {
         container.style.display = 'none';
@@ -67,8 +106,10 @@
         const iconEl = createPinnedTabIcon(tab);
         container.appendChild(iconEl);
       });
+
+      console.log('[SidepanelPinnedTabs] Rendered', pinnedTabs.length, 'pinned tabs');
     } catch (error) {
-      console.error('Failed to render pinned tabs:', error);
+      console.error('[SidepanelPinnedTabs] Failed to render pinned tabs:', error);
     }
   }
 
@@ -81,7 +122,7 @@
     iconEl.dataset.url = tab.url;
     iconEl.title = tab.title;
 
-    // Add active/inactive state
+    // Add active/inactive state - but always show the icon
     if (tab.isActive) {
       iconEl.classList.add('pinned-tab-active');
     } else {
@@ -112,10 +153,12 @@
       try {
         if (tab.isActive && tab.tabId) {
           await window.pinnedTabsModule.closeActiveTab(tab.tabId);
+          // Re-render after closing to show the tab as inactive but still pinned
+          setTimeout(() => renderPinnedTabs(), 100);
         } else {
           await window.pinnedTabsModule.removePinnedTab(tab.url);
+          await renderPinnedTabs();
         }
-        await renderPinnedTabs();
       } catch (error) {
         console.error('Failed to handle pinned tab action:', error);
       }
@@ -147,31 +190,48 @@
   }
 
   /**
-   * Setup message listener for updates
+   * Setup message listener for updates with debounced rendering
    */
   function setupMessageListener() {
-    // Listen for pinned tabs updates
-    chrome.runtime.onMessage.addListener((message) => {
+    // Listen for pinned tabs updates from background script and auto-sync
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === 'PINNED_TABS_UPDATED') {
-        renderPinnedTabs();
+        console.log('[SidepanelPinnedTabs] Received PINNED_TABS_UPDATED message');
+        // Use debounced render to prevent rapid successive renders
+        debouncedRender();
       }
     });
 
     // Listen for tab updates to refresh active/inactive state
-    chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-      if (changeInfo.url || changeInfo.title || changeInfo.favIconUrl) {
-        renderPinnedTabs();
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.url || changeInfo.title || changeInfo.favIconUrl || changeInfo.pinned !== undefined) {
+        console.log('[SidepanelPinnedTabs] Tab updated:', tabId, changeInfo);
+        // Use debounced render to prevent rapid successive renders
+        debouncedRender();
       }
     });
 
-    // Listen for tab removal
-    chrome.tabs.onRemoved.addListener(() => {
-      renderPinnedTabs();
+    // Listen for tab removal - update UI but keep pinned icons
+    chrome.tabs.onRemoved.addListener((tabId) => {
+      console.log('[SidepanelPinnedTabs] Tab removed:', tabId);
+      // Use debounced render to prevent rapid successive renders
+      debouncedRender();
     });
 
     // Listen for tab activation changes
-    chrome.tabs.onActivated.addListener(() => {
-      renderPinnedTabs();
+    chrome.tabs.onActivated.addListener((activeInfo) => {
+      console.log('[SidepanelPinnedTabs] Tab activated:', activeInfo.tabId);
+      // Use debounced render to prevent rapid successive renders
+      debouncedRender();
+    });
+
+    // Listen for storage changes for cross-window sync
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      if (namespace === 'local' && changes.pinnedTabs) {
+        console.log('[SidepanelPinnedTabs] Storage changed:', changes.pinnedTabs);
+        // Use debounced render to prevent rapid successive renders
+        debouncedRender();
+      }
     });
   }
 
@@ -185,6 +245,7 @@
   // Export for debugging
   window.sidepanelPinnedTabs = {
     render: renderPinnedTabs,
+    debouncedRender: debouncedRender,
     init: initPinnedTabs
   };
 })();
