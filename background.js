@@ -69,6 +69,42 @@ async function toggleCommandBar() {
 
 async function openExtensionPopup() {
   try {
+    // Ensure there is a focused browser window; create one if none exist.
+    const ensureFocusedWindow = async () => {
+      const getLastFocused = () => new Promise((resolve) => {
+        chrome.windows.getLastFocused({ populate: false }, (win) => {
+          if (chrome.runtime.lastError) {
+            resolve(null);
+          } else {
+            resolve(win);
+          }
+        });
+      });
+
+      const focusWindow = (windowId) => new Promise((resolve) => {
+        chrome.windows.update(windowId, { focused: true }, () => resolve());
+      });
+
+      const createWindow = () => new Promise((resolve, reject) => {
+        chrome.windows.create({ url: 'chrome://newtab/', focused: true }, (win) => {
+          if (chrome.runtime.lastError || !win) {
+            reject(chrome.runtime.lastError || new Error('Failed to create window'));
+          } else {
+            resolve(win);
+          }
+        });
+      });
+
+      let win = await getLastFocused();
+      if (!win || win.state === 'minimized') {
+        win = await createWindow();
+      } else {
+        await focusWindow(win.id);
+      }
+      return win;
+    };
+
+    await ensureFocusedWindow();
     await chrome.action.openPopup();
   } catch (error) {
     console.error('Failed to open extension popup:', error);
