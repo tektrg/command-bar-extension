@@ -4,39 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Command Bar Popup</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" />
-
-    <link rel="stylesheet" href="css/ui-shell.css" />
-    </head>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 800px;
+        height: 500px;
+        background: transparent;
+        overflow: hidden;
+      }
+    </style>
+  </head>
   <body>
-    <template
-      id="prd-stv-shell-template"
-      src="templates/ui-shell.html"
-      data-surface="popup"
-      data-close-on-open="true"
-      data-focus-input="true"
-    ></template>
-
-    <!-- Module files in dependency order -->
-    <script src="js/constants.js"></script>
-    <script src="js/utils.js"></script>
-    <script src="js/storage.js"></script>
-    <script src="js/bookmarks.js"></script>
-    <script src="js/folderState.js"></script>
-    <script src="js/vendor/sortable.min.js"></script>
-    <script src="js/dragDrop.js"></script>
-    <script src="js/tabUtils.js"></script>
-    <script src="js/tabSort.js"></script>
-    <script src="js/bookmarkView.js"></script>
-    <!-- Pinned Tabs Module -->
-    <script src="js/pinnedTabs.js"></script>
-    <script src="js/sidepanel-pinned-tabs.js"></script>
-    <!-- Renderer modules (load before facade) -->
-    <script src="js/renderer-history.js"></script>
-    <script src="js/renderer-rendering.js"></script>
-    <script src="js/renderer-ui-actions.js"></script>
-    <script src="js/renderer.js"></script>
-    <script src="js/appBootstrap.js"></script>
-    <script src="js/injectShell.js"></script>
+    <script src="js/popup-init.js"></script>
+    <script src="content.js"></script>
   </body>
 </html>
