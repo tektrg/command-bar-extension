@@ -1,7 +1,17 @@
 // content.js
 (() => {
-  if (window.__cmdBarInjected) return;
+  console.log('Content script loading...');
+  if (window.__cmdBarInjected) {
+    console.log('Content script already injected, skipping');
+    return;
+  }
   window.__cmdBarInjected = true;
+  console.log('Content script injected successfully');
+
+// Detect when running inside the extension popup so we can render the command bar there.
+const extensionOrigin = chrome?.runtime?.id ? `chrome-extension://${chrome.runtime.id}` : '';
+const isExtensionPage = window.location?.origin === extensionOrigin;
+const isPopupContext = Boolean(window.__CMD_BAR_POPUP) || (isExtensionPage && window.location?.pathname?.endsWith('/popup.html'));
 
 // Constants
 const CONSTANTS = {
@@ -25,12 +35,12 @@ const messageService = {
 
 // UI State Manager for better organization
 const uiState = {
-  shadowHost: null,
-  shadowRoot: null,
   overlay: null,
   input: null,
   listEl: null,
   statusBar: null,
+  pinnedTabsEl: null,
+  pinnedTabs: [],
   items: [],
   selectedIdx: -1,
   idleTimer: null,
@@ -58,12 +68,28 @@ const uiState = {
   },
   
   setItems(newItems) {
-    this.items = this.sortItemsByLastVisited(newItems || []);
+        this.items = this.sortItems(newItems || []);
     this.selectedIdx = -1;
   },
   
-  sortItemsByLastVisited(items) {
+    sortItems(items) {
+    const typeOrder = {
+      'tab': 1,
+      'bookmark': 2,
+      'history': 3
+    };
+
     return items.sort((a, b) => {
+      const aType = a.type || a.source;
+      const bType = b.type || b.source;
+      
+      const aOrder = typeOrder[aType] || 4;
+      const bOrder = typeOrder[bType] || 4;
+
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+
       // Get last visited time for each item
       const getLastVisited = (item) => {
         if (item.lastAccessed) return item.lastAccessed; // tabs
@@ -85,6 +111,7 @@ const uiState = {
 // Legacy global variables for backward compatibility
 let overlay, input, listEl, statusBar, items, selectedIdx, idleTimer;
 let deleteConfirm, lastConfirmIdx, confirmTimer;
+let stylesInjected = false;
 
 function createOverlay() {
     // Update state references
@@ -99,36 +126,32 @@ function createOverlay() {
     confirmTimer = uiState.confirmTimer;
     idleTimer = uiState.idleTimer;
 
-    // Create shadow host
-    uiState.shadowHost = document.createElement('div');
-    uiState.shadowHost.id = 'prd-stv-cmd-bar-host';
-
-    // Attach shadow root with open mode for debugging, closed mode for production
-    uiState.shadowRoot = uiState.shadowHost.attachShadow({ mode: 'open' });
-
-    // Load CSS into shadow DOM
-    const styleElement = document.createElement('style');
-    fetch(chrome.runtime.getURL('shadow-overlay.css'))
-      .then(response => response.text())
-      .then(css => {
-        styleElement.textContent = css;
-        uiState.shadowRoot.appendChild(styleElement);
-      })
-      .catch(err => {
-        console.error('Failed to load shadow-overlay.css:', err);
-        // Fallback: use inline styles if CSS file fails to load
-        styleElement.textContent = `
-          :host { display: block; }
-          #prd-stv-cmd-bar-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.3);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 2147483647;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          }
-        `;
-        uiState.shadowRoot.appendChild(styleElement);
-      });
+    // Load CSS into the document once
+    if (!stylesInjected) {
+      const styleElement = document.createElement('style');
+      fetch(chrome.runtime.getURL('shadow-overlay.css'))
+        .then(response => response.text())
+        .then(css => {
+          styleElement.textContent = css;
+          document.head.appendChild(styleElement);
+          stylesInjected = true;
+        })
+        .catch(err => {
+          console.error('Failed to load shadow-overlay.css:', err);
+          // Fallback: use inline styles if CSS file fails to load
+          styleElement.textContent = `
+            #prd-stv-cmd-bar-overlay {
+              position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+              backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.3);
+              display: flex; align-items: center; justify-content: center;
+              z-index: 2147483647;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            }
+          `;
+          document.head.appendChild(styleElement);
+          stylesInjected = true;
+        });
+    }
 
     // Create overlay inside shadow DOM
     uiState.overlay = document.createElement('div');
@@ -178,10 +201,20 @@ function createOverlay() {
     listEl = uiState.listEl;
     statusBar = uiState.statusBar;
 
+    // Create pinned tabs container (same as sidepanel)
+    uiState.pinnedTabsEl = document.createElement('div');
+    uiState.pinnedTabsEl.id = 'pinned-tabs-container';
+    uiState.pinnedTabsEl.className = 'prd-stv-pinned-tabs';
+    uiState.pinnedTabsEl.style.cssText = 'display:none;';
+
+    container.appendChild(uiState.pinnedTabsEl);
     container.appendChild(uiState.input);
     container.appendChild(uiState.listEl);
     container.appendChild(uiState.statusBar);
     uiState.overlay.appendChild(container);
+
+    // Load and render pinned tabs
+    loadPinnedTabs();
 
     // Close overlay when user clicks outside the container
     uiState.overlay.addEventListener('mousedown', (ev) => {
@@ -192,11 +225,8 @@ function createOverlay() {
     // Prevent clicks inside the container from bubbling to overlay handler
     container.addEventListener('mousedown', (ev) => ev.stopPropagation());
 
-    // Append overlay to shadow root instead of document body
-    uiState.shadowRoot.appendChild(uiState.overlay);
-
-    // Append shadow host to document body
-    document.body.appendChild(uiState.shadowHost);
+    // Append overlay directly to document body
+    document.body.appendChild(uiState.overlay);
 
     // listeners
     uiState.input.addEventListener('keydown', onKeyDown);
@@ -221,11 +251,11 @@ function createOverlay() {
     cancelAutoOpen();
     document.removeEventListener('keydown', onGlobalKeyDown);
     document.removeEventListener('keyup', onGlobalKeyUp);
-    uiState.shadowHost?.remove();
-    uiState.shadowHost = null;
-    uiState.shadowRoot = null;
     uiState.overlay = null;
     overlay = null;
+    if (isPopupContext) {
+      window.close();
+    }
   }
 
 function toggleOverlay() {
@@ -322,8 +352,12 @@ function onGlobalKeyDown(e) {
       renderList();
       cancelAutoOpen();
 
-      // Blur input so backspace won't edit text
-      if (document.activeElement === input) input.blur();
+      // Blur input so backspace won't edit text - use requestAnimationFrame to ensure proper timing
+      requestAnimationFrame(() => {
+        if (document.activeElement === input) {
+          input.blur();
+        }
+      });
       return true;
     },
     
@@ -342,7 +376,11 @@ function onGlobalKeyDown(e) {
           selectedIdx = items.length - 1;
           renderList();
           cancelAutoOpen();
-          input.blur();
+          requestAnimationFrame(() => {
+            if (document.activeElement === input) {
+              input.blur();
+            }
+          });
         }
         return true;
       }
@@ -355,11 +393,10 @@ function onGlobalKeyDown(e) {
         return false;
       }
 
-      // Check shadow root's active element since we're using Shadow DOM
-      const shadowActiveElement = uiState.shadowRoot?.activeElement;
+      const activeEl = document.activeElement;
 
       // Allow normal backspace behavior when input is focused and has text
-      if (shadowActiveElement === input && input.value !== '') {
+      if (activeEl === input && input.value !== '') {
         return false; // Don't handle - allow default backspace behavior
       }
 
@@ -497,7 +534,7 @@ function hideDeleteConfirm() {
       uiState.confirmTimer = null;
       confirmTimer = null;
     }
-    const statusMessage = uiState.shadowRoot?.getElementById('prd-stv-status-message');
+    const statusMessage = document.getElementById('prd-stv-status-message');
     if (statusMessage) {
       statusMessage.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
       statusMessage.classList.remove('confirm');
@@ -518,7 +555,7 @@ function removeProgressBars() {
   }
 
 function showDeleteConfirm() {
-    const statusMessage = uiState.shadowRoot?.getElementById('prd-stv-status-message');
+    const statusMessage = document.getElementById('prd-stv-status-message');
     if (!statusMessage) return;
 
     statusMessage.textContent = 'Press backspace again to confirm';
@@ -663,16 +700,12 @@ function getIconHtml(it) {
   }
 
 function showToast(message, duration = 2000) {
-    const existing = uiState.shadowRoot?.getElementById('prd-stv-toast');
+    const existing = document.getElementById('prd-stv-toast');
     existing?.remove();
     const div = document.createElement('div');
     div.id = 'prd-stv-toast';
     div.textContent = message;
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(div);
-    } else {
-      document.body.appendChild(div);
-    }
+    document.body.appendChild(div);
     setTimeout(() => div.remove(), duration);
   }
 
@@ -748,7 +781,7 @@ function showToast(message, duration = 2000) {
         return;
       }
 
-      const tabCounter = uiState.shadowRoot?.getElementById('prd-stv-tab-counter');
+      const tabCounter = document.getElementById('prd-stv-tab-counter');
       if (tabCounter && response && response.count !== undefined) {
         const oldCount = parseInt(tabCounter.textContent) || 0;
         const newCount = response.count;
@@ -805,11 +838,7 @@ function showToast(message, duration = 2000) {
         background: #353535 !important;
       }
     `;
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(style);
-    } else {
-      document.head.appendChild(style);
-    }
+    document.head.appendChild(style);
 
     // Position the menu relative to the clicked button
     const buttonRect = event.target.getBoundingClientRect();
@@ -817,11 +846,7 @@ function showToast(message, duration = 2000) {
     contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
 
     // Add to shadow root if available
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(contextMenu);
-    } else {
-      document.body.appendChild(contextMenu);
-    }
+    document.body.appendChild(contextMenu);
 
     // Handle menu item clicks
     contextMenu.addEventListener('click', (e) => {
@@ -841,7 +866,7 @@ function showToast(message, duration = 2000) {
   }
 
   function closeBookmarkContextMenu() {
-    const existingMenu = uiState.shadowRoot?.getElementById('prd-stv-bookmark-context-menu') || document.getElementById('prd-stv-bookmark-context-menu');
+    const existingMenu = document.getElementById('prd-stv-bookmark-context-menu');
     if (existingMenu) {
       existingMenu.remove();
     }
@@ -927,6 +952,9 @@ function showToast(message, duration = 2000) {
     `;
 
     contextMenu.innerHTML = `
+      <div class="context-item" data-action="pin" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
+        <span>Pin Tab</span>
+      </div>
       <div class="context-item" data-action="move-to-folder" style="padding:10px 14px;cursor:pointer;color:#f5f5f5;font-size:14px;transition:background-color 0.15s ease;border-bottom:1px solid #3a3a3a;">
         <span>Move to...</span>
       </div>
@@ -946,11 +974,7 @@ function showToast(message, duration = 2000) {
         background: #353535 !important;
       }
     `;
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(style);
-    } else {
-      document.head.appendChild(style);
-    }
+    document.head.appendChild(style);
 
     // Position the menu relative to the clicked button
     const buttonRect = event.target.getBoundingClientRect();
@@ -958,16 +982,14 @@ function showToast(message, duration = 2000) {
     contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
 
     // Add to shadow root if available
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(contextMenu);
-    } else {
-      document.body.appendChild(contextMenu);
-    }
+    document.body.appendChild(contextMenu);
 
     // Handle menu item clicks
     contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.context-item')?.dataset.action;
-      if (action === 'move-to-folder') {
+      if (action === 'pin') {
+        await handlePinTab(tab);
+      } else if (action === 'move-to-folder') {
         // Create a fake bookmark object to reuse the existing move dialog
         const fakeBookmark = {
           id: `tab_${tab.id}`,
@@ -990,7 +1012,7 @@ function showToast(message, duration = 2000) {
   }
 
   function closeTabContextMenu() {
-    const existingMenu = uiState.shadowRoot?.getElementById('prd-stv-tab-context-menu') || document.getElementById('prd-stv-tab-context-menu');
+    const existingMenu = document.getElementById('prd-stv-tab-context-menu');
     if (existingMenu) {
       existingMenu.remove();
     }
@@ -1038,11 +1060,152 @@ function showToast(message, duration = 2000) {
     }
   }
 
+  async function handlePinTab(tab) {
+    try {
+      const tabData = {
+        url: tab.url,
+        title: tab.title || 'Untitled',
+        favicon: tab.icon || tab.favIconUrl || ''
+      };
+      
+      const response = await chrome.runtime.sendMessage({ 
+        type: 'ADD_PINNED_TAB', 
+        tabData 
+      });
+      
+      if (response && response.success) {
+        showToast('Tab pinned');
+        loadPinnedTabs();
+      } else {
+        throw new Error(response?.error || 'Failed to pin tab');
+      }
+    } catch (error) {
+      console.error('Failed to pin tab:', error);
+      showToast(error.message || 'Failed to pin tab');
+    }
+  }
+
+  // Pinned Tabs Functions
+  async function loadPinnedTabs() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_PINNED_TABS' });
+      if (response && response.pinnedTabs) {
+        renderPinnedTabs(response.pinnedTabs);
+      }
+    } catch (error) {
+      console.error('Failed to load pinned tabs:', error);
+    }
+  }
+
+  function renderPinnedTabs(pinnedTabs) {
+    if (!uiState.pinnedTabsEl) return;
+
+    if (!pinnedTabs || pinnedTabs.length === 0) {
+      uiState.pinnedTabsEl.style.display = 'none';
+      return;
+    }
+
+    // Use same display style as sidepanel
+    uiState.pinnedTabsEl.style.display = 'grid';
+    uiState.pinnedTabsEl.innerHTML = '';
+
+    pinnedTabs.forEach(pinnedTab => {
+      // Create icon element with same class as sidepanel
+      const tabIcon = document.createElement('div');
+      tabIcon.className = 'pinned-tab-icon';
+      tabIcon.dataset.url = pinnedTab.url;
+      tabIcon.title = pinnedTab.title;
+
+      // Add active/inactive state classes (same as sidepanel)
+      if (pinnedTab.isActive) {
+        tabIcon.classList.add('pinned-tab-active');
+      } else {
+        tabIcon.classList.add('pinned-tab-inactive');
+      }
+
+      // Create favicon with same class as sidepanel
+      const favicon = document.createElement('img');
+      favicon.className = 'pinned-tab-favicon';
+      favicon.src = pinnedTab.favicon || CONSTANTS.FALLBACK_ICON;
+      favicon.alt = pinnedTab.title;
+      favicon.onerror = () => {
+        favicon.src = CONSTANTS.FALLBACK_ICON;
+      };
+      tabIcon.appendChild(favicon);
+
+      // Create action button with same class as sidepanel
+      const btn = document.createElement('button');
+      btn.className = 'pinned-tab-action';
+      btn.innerHTML = pinnedTab.isActive ? '−' : '×';
+      btn.title = pinnedTab.isActive ? 'Close tab' : 'Remove from pinned';
+
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          if (pinnedTab.isActive && pinnedTab.tabId) {
+            // Close active tab
+            await chrome.runtime.sendMessage({ 
+              type: 'CLOSE_PINNED_TAB', 
+              tabId: pinnedTab.tabId 
+            });
+          } else {
+            // Remove pinned tab
+            await chrome.runtime.sendMessage({ 
+              type: 'REMOVE_PINNED_TAB', 
+              url: pinnedTab.url 
+            });
+          }
+          // Reload pinned tabs
+          loadPinnedTabs();
+        } catch (error) {
+          console.error('Failed to handle pinned tab action:', error);
+        }
+      };
+      tabIcon.appendChild(btn);
+
+      // Click on icon to open/activate (not on button)
+      tabIcon.onclick = async (e) => {
+        if (e.target === btn) return; // Don't trigger when clicking button
+        
+        try {
+          if (pinnedTab.isActive && pinnedTab.tabId) {
+            // Activate existing tab
+            await chrome.runtime.sendMessage({ 
+              type: 'ACTIVATE_TAB', 
+              tabId: pinnedTab.tabId 
+            });
+            destroyOverlay();
+          } else {
+            // Open new tab
+            await chrome.runtime.sendMessage({ 
+              type: 'OPEN_PINNED_TAB', 
+              url: pinnedTab.url 
+            });
+            destroyOverlay();
+          }
+        } catch (error) {
+          console.error('Failed to open pinned tab:', error);
+        }
+      };
+
+      uiState.pinnedTabsEl.appendChild(tabIcon);
+    });
+  }
+
   chrome.runtime.onMessage.addListener((msg) => {
+    console.log('Content script received message:', msg.type);
     if (msg.type === 'TOGGLE') {
+      console.log('Toggling overlay...');
       toggleOverlay();
     } else if (msg.type === 'TAB_COUNT_CHANGED') {
       updateTabCount();
+    } else if (msg.type === 'PINNED_TABS_UPDATED') {
+      loadPinnedTabs();
     }
   });
+
+  // In the extension popup, render the command bar immediately instead of using the side panel shell.
+  if (isPopupContext) {
+    createOverlay();
+  }
 })();

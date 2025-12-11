@@ -106,12 +106,25 @@ const rendererUIActions = {
     }, 10);
   },
 
-  showTabContextMenu: (event, tab, itemElement) => {
+  showTabContextMenu: async (event, tab, itemElement) => {
     rendererUIActions.closeContextMenu();
+
+    // Check if tab is already pinned using the pinned tabs module
+    let isPinned = false;
+    try {
+      if (window.pinnedTabsModule && window.pinnedTabsModule.isUrlPinned) {
+        isPinned = await window.pinnedTabsModule.isUrlPinned(tab.url);
+      }
+    } catch (error) {
+      console.warn('Failed to check pinned status:', error);
+    }
 
     const contextMenu = document.createElement('div');
     contextMenu.className = 'prd-stv-context-menu';
     contextMenu.innerHTML = `
+      <div class="prd-stv-context-item" data-action="${isPinned ? 'unpin' : 'pin'}">
+        <span>${isPinned ? 'Unpin Tab' : 'Pin Tab'}</span>
+      </div>
       <div class="prd-stv-context-item" data-action="move-to-folder">
         <span>Move to...</span>
       </div>
@@ -128,9 +141,52 @@ const rendererUIActions = {
 
     document.body.appendChild(contextMenu);
 
-    contextMenu.addEventListener('click', (e) => {
+    contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-      if (action === 'move-to-folder') {
+      if (action === 'pin') {
+        try {
+          const tabData = {
+            url: tab.url,
+            title: tab.title || 'Untitled',
+            favicon: tab.favIconUrl || ''
+          };
+          const response = await chrome.runtime.sendMessage({
+            type: 'ADD_PINNED_TAB',
+            tabData
+          });
+          if (response && response.success) {
+            window.utils.showToast('Tab pinned');
+            // Trigger a render update to show pinned status
+            if (window.state && window.elements) {
+              await window.renderer.render(window.state, window.elements);
+            }
+          } else {
+            throw new Error(response?.error || 'Failed to pin tab');
+          }
+        } catch (error) {
+          console.error('Failed to pin tab:', error);
+          window.utils.showToast(error.message || 'Failed to pin tab');
+        }
+      } else if (action === 'unpin') {
+        try {
+          const response = await chrome.runtime.sendMessage({
+            type: 'REMOVE_PINNED_TAB',
+            url: tab.url
+          });
+          if (response && response.success) {
+            window.utils.showToast('Tab unpinned');
+            // Trigger a render update to show unpinned status
+            if (window.state && window.elements) {
+              await window.renderer.render(window.state, window.elements);
+            }
+          } else {
+            throw new Error(response?.error || 'Failed to unpin tab');
+          }
+        } catch (error) {
+          console.error('Failed to unpin tab:', error);
+          window.utils.showToast(error.message || 'Failed to unpin tab');
+        }
+      } else if (action === 'move-to-folder') {
         const fakeBookmark = {
           id: `tab_${tab.id}`,
           title: tab.title || 'Untitled',

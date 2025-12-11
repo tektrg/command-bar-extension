@@ -74,6 +74,19 @@ const storage = {
   async saveBookmarkViewMode(state) {
     const { STORAGE_KEYS } = window.CONSTANTS;
     return await this.save(STORAGE_KEYS.BOOKMARK_VIEW_MODE, state.bookmarkViewMode);
+  },
+
+  async loadSearchQuery(state) {
+    const { STORAGE_KEYS } = window.CONSTANTS;
+    const searchQuery = await this.load(STORAGE_KEYS.SEARCH_QUERY, '');
+    if (typeof searchQuery === 'string') {
+      state.query = searchQuery;
+    }
+  },
+
+  async saveSearchQuery(query) {
+    const { STORAGE_KEYS } = window.CONSTANTS;
+    return await this.save(STORAGE_KEYS.SEARCH_QUERY, query);
   }
 };
 

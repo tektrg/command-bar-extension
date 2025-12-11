@@ -83,3 +83,6 @@ The extension requires these permissions:
 - `bookmarks`: Search bookmark data
 - `history`: Access browser history
 - `scripting`: Inject content scripts dynamically
+
+## Development workflow
+- Do not git commit unless user explicitly request.
