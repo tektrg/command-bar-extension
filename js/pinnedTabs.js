@@ -11,6 +11,9 @@ const pinnedTabsModule = {
    * Normalize URL for consistent comparison
    */
   normalizeUrl(url) {
+    if (!url || typeof url !== 'string') {
+      return '';
+    }
     try {
       const urlObj = new URL(url);
       // Remove hash and trailing slash for consistency
@@ -21,7 +24,7 @@ const pinnedTabsModule = {
       return urlObj.toString();
     } catch (error) {
       console.warn('Failed to normalize URL:', url, error);
-      return url;
+      return '';
     }
   },
 
@@ -34,7 +37,7 @@ const pinnedTabsModule = {
   async load() {
     try {
       const result = await chrome.storage.local.get('pinnedTabs');
-      const pinnedTabs = result.pinnedTabs || [];
+      const pinnedTabs = (result.pinnedTabs || []).filter((tab) => this.normalizeUrl(tab.url));
 
       // Ensure each pinned tab has required fields
       return pinnedTabs.map(tab => ({
@@ -155,6 +158,11 @@ const pinnedTabsModule = {
       const pinnedTabs = await this.load();
       const normalizedUrl = this.normalizeUrl(tabData.url);
 
+      if (!normalizedUrl) {
+        console.warn('[PinnedTabsModule] Cannot pin invalid URL:', tabData.url);
+        return false;
+      }
+
       // Enhanced duplicate detection with normalized URLs
       if (pinnedTabs.some(pt => this.normalizeUrl(pt.url) === normalizedUrl)) {
         console.log('[PinnedTabsModule] Tab already pinned (normalized match):', normalizedUrl);
@@ -196,6 +204,11 @@ const pinnedTabsModule = {
       const pinnedTabs = await this.load();
       const normalizedUrl = this.normalizeUrl(url);
 
+      if (!normalizedUrl) {
+        console.warn('[PinnedTabsModule] Cannot remove invalid URL:', url);
+        return false;
+      }
+
       // Enhanced duplicate detection with normalized URLs
       const filtered = pinnedTabs.filter(pt => this.normalizeUrl(pt.url) !== normalizedUrl);
 
@@ -224,7 +237,9 @@ const pinnedTabsModule = {
       chrome.tabs.query({})
     ]);
 
-    return pinnedTabs.map(pinnedTab => {
+    return pinnedTabs
+      .filter((pinnedTab) => this.normalizeUrl(pinnedTab.url))
+      .map(pinnedTab => {
       // Find if this pinned tab is currently open
       const activeTab = openTabs.find(tab => this.normalizeUrl(tab.url) === this.normalizeUrl(pinnedTab.url));
       
