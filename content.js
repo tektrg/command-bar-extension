@@ -8,6 +8,11 @@
   window.__cmdBarInjected = true;
   console.log('Content script injected successfully');
 
+// Detect when running inside the extension popup so we can render the command bar there.
+const extensionOrigin = chrome?.runtime?.id ? `chrome-extension://${chrome.runtime.id}` : '';
+const isExtensionPage = window.location?.origin === extensionOrigin;
+const isPopupContext = Boolean(window.__CMD_BAR_POPUP) || (isExtensionPage && window.location?.pathname?.endsWith('/popup.html'));
+
 // Constants
 const CONSTANTS = {
   CONFIRM_TIMEOUT: 2000,
@@ -30,8 +35,6 @@ const messageService = {
 
 // UI State Manager for better organization
 const uiState = {
-  shadowHost: null,
-  shadowRoot: null,
   overlay: null,
   input: null,
   listEl: null,
@@ -108,6 +111,7 @@ const uiState = {
 // Legacy global variables for backward compatibility
 let overlay, input, listEl, statusBar, items, selectedIdx, idleTimer;
 let deleteConfirm, lastConfirmIdx, confirmTimer;
+let stylesInjected = false;
 
 function createOverlay() {
     // Update state references
@@ -122,48 +126,32 @@ function createOverlay() {
     confirmTimer = uiState.confirmTimer;
     idleTimer = uiState.idleTimer;
 
-    // Create shadow host
-    uiState.shadowHost = document.createElement('div');
-    uiState.shadowHost.id = 'prd-stv-cmd-bar-host';
-    // Prevent layout shift by positioning the host element itself
-    uiState.shadowHost.style.position = 'fixed';
-    uiState.shadowHost.style.top = '0';
-    uiState.shadowHost.style.left = '0';
-    uiState.shadowHost.style.zIndex = '2147483647';
-    uiState.shadowHost.style.opacity = '0';
-    uiState.shadowHost.style.transition = 'opacity 0.05s ease-in-out';
-
-    // Attach shadow root with open mode for debugging, closed mode for production
-    uiState.shadowRoot = uiState.shadowHost.attachShadow({ mode: 'open' });
-
-    // Load CSS into shadow DOM
-    const styleElement = document.createElement('style');
-    fetch(chrome.runtime.getURL('shadow-overlay.css'))
-      .then(response => response.text())
-      .then(css => {
-        styleElement.textContent = css;
-        uiState.shadowRoot.appendChild(styleElement);
-      })
-      .catch(err => {
-        console.error('Failed to load shadow-overlay.css:', err);
-        // Fallback: use inline styles if CSS file fails to load
-        styleElement.textContent = `
-          :host { display: block; }
-          #prd-stv-cmd-bar-overlay {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.3);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 2147483647;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-          }
-        `;
-        uiState.shadowRoot.appendChild(styleElement);
-      })
-      .finally(() => {
-        if (uiState.shadowHost) {
-          uiState.shadowHost.style.opacity = '1';
-        }
-      });
+    // Load CSS into the document once
+    if (!stylesInjected) {
+      const styleElement = document.createElement('style');
+      fetch(chrome.runtime.getURL('shadow-overlay.css'))
+        .then(response => response.text())
+        .then(css => {
+          styleElement.textContent = css;
+          document.head.appendChild(styleElement);
+          stylesInjected = true;
+        })
+        .catch(err => {
+          console.error('Failed to load shadow-overlay.css:', err);
+          // Fallback: use inline styles if CSS file fails to load
+          styleElement.textContent = `
+            #prd-stv-cmd-bar-overlay {
+              position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+              backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.3);
+              display: flex; align-items: center; justify-content: center;
+              z-index: 2147483647;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            }
+          `;
+          document.head.appendChild(styleElement);
+          stylesInjected = true;
+        });
+    }
 
     // Create overlay inside shadow DOM
     uiState.overlay = document.createElement('div');
@@ -237,11 +225,8 @@ function createOverlay() {
     // Prevent clicks inside the container from bubbling to overlay handler
     container.addEventListener('mousedown', (ev) => ev.stopPropagation());
 
-    // Append overlay to shadow root instead of document body
-    uiState.shadowRoot.appendChild(uiState.overlay);
-
-    // Append shadow host to document body
-    document.body.appendChild(uiState.shadowHost);
+    // Append overlay directly to document body
+    document.body.appendChild(uiState.overlay);
 
     // listeners
     uiState.input.addEventListener('keydown', onKeyDown);
@@ -266,11 +251,11 @@ function createOverlay() {
     cancelAutoOpen();
     document.removeEventListener('keydown', onGlobalKeyDown);
     document.removeEventListener('keyup', onGlobalKeyUp);
-    uiState.shadowHost?.remove();
-    uiState.shadowHost = null;
-    uiState.shadowRoot = null;
     uiState.overlay = null;
     overlay = null;
+    if (isPopupContext) {
+      window.close();
+    }
   }
 
 function toggleOverlay() {
@@ -408,11 +393,10 @@ function onGlobalKeyDown(e) {
         return false;
       }
 
-      // Check shadow root's active element since we're using Shadow DOM
-      const shadowActiveElement = uiState.shadowRoot?.activeElement;
+      const activeEl = document.activeElement;
 
       // Allow normal backspace behavior when input is focused and has text
-      if (shadowActiveElement === input && input.value !== '') {
+      if (activeEl === input && input.value !== '') {
         return false; // Don't handle - allow default backspace behavior
       }
 
@@ -550,7 +534,7 @@ function hideDeleteConfirm() {
       uiState.confirmTimer = null;
       confirmTimer = null;
     }
-    const statusMessage = uiState.shadowRoot?.getElementById('prd-stv-status-message');
+    const statusMessage = document.getElementById('prd-stv-status-message');
     if (statusMessage) {
       statusMessage.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
       statusMessage.classList.remove('confirm');
@@ -571,7 +555,7 @@ function removeProgressBars() {
   }
 
 function showDeleteConfirm() {
-    const statusMessage = uiState.shadowRoot?.getElementById('prd-stv-status-message');
+    const statusMessage = document.getElementById('prd-stv-status-message');
     if (!statusMessage) return;
 
     statusMessage.textContent = 'Press backspace again to confirm';
@@ -716,16 +700,12 @@ function getIconHtml(it) {
   }
 
 function showToast(message, duration = 2000) {
-    const existing = uiState.shadowRoot?.getElementById('prd-stv-toast');
+    const existing = document.getElementById('prd-stv-toast');
     existing?.remove();
     const div = document.createElement('div');
     div.id = 'prd-stv-toast';
     div.textContent = message;
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(div);
-    } else {
-      document.body.appendChild(div);
-    }
+    document.body.appendChild(div);
     setTimeout(() => div.remove(), duration);
   }
 
@@ -801,7 +781,7 @@ function showToast(message, duration = 2000) {
         return;
       }
 
-      const tabCounter = uiState.shadowRoot?.getElementById('prd-stv-tab-counter');
+      const tabCounter = document.getElementById('prd-stv-tab-counter');
       if (tabCounter && response && response.count !== undefined) {
         const oldCount = parseInt(tabCounter.textContent) || 0;
         const newCount = response.count;
@@ -858,11 +838,7 @@ function showToast(message, duration = 2000) {
         background: #353535 !important;
       }
     `;
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(style);
-    } else {
-      document.head.appendChild(style);
-    }
+    document.head.appendChild(style);
 
     // Position the menu relative to the clicked button
     const buttonRect = event.target.getBoundingClientRect();
@@ -870,11 +846,7 @@ function showToast(message, duration = 2000) {
     contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
 
     // Add to shadow root if available
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(contextMenu);
-    } else {
-      document.body.appendChild(contextMenu);
-    }
+    document.body.appendChild(contextMenu);
 
     // Handle menu item clicks
     contextMenu.addEventListener('click', (e) => {
@@ -894,7 +866,7 @@ function showToast(message, duration = 2000) {
   }
 
   function closeBookmarkContextMenu() {
-    const existingMenu = uiState.shadowRoot?.getElementById('prd-stv-bookmark-context-menu') || document.getElementById('prd-stv-bookmark-context-menu');
+    const existingMenu = document.getElementById('prd-stv-bookmark-context-menu');
     if (existingMenu) {
       existingMenu.remove();
     }
@@ -1002,11 +974,7 @@ function showToast(message, duration = 2000) {
         background: #353535 !important;
       }
     `;
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(style);
-    } else {
-      document.head.appendChild(style);
-    }
+    document.head.appendChild(style);
 
     // Position the menu relative to the clicked button
     const buttonRect = event.target.getBoundingClientRect();
@@ -1014,11 +982,7 @@ function showToast(message, duration = 2000) {
     contextMenu.style.top = `${buttonRect.bottom + 4}px`; // Below the button
 
     // Add to shadow root if available
-    if (uiState.shadowRoot) {
-      uiState.shadowRoot.appendChild(contextMenu);
-    } else {
-      document.body.appendChild(contextMenu);
-    }
+    document.body.appendChild(contextMenu);
 
     // Handle menu item clicks
     contextMenu.addEventListener('click', async (e) => {
@@ -1048,7 +1012,7 @@ function showToast(message, duration = 2000) {
   }
 
   function closeTabContextMenu() {
-    const existingMenu = uiState.shadowRoot?.getElementById('prd-stv-tab-context-menu') || document.getElementById('prd-stv-tab-context-menu');
+    const existingMenu = document.getElementById('prd-stv-tab-context-menu');
     if (existingMenu) {
       existingMenu.remove();
     }
@@ -1239,4 +1203,9 @@ function showToast(message, duration = 2000) {
       loadPinnedTabs();
     }
   });
+
+  // In the extension popup, render the command bar immediately instead of using the side panel shell.
+  if (isPopupContext) {
+    createOverlay();
+  }
 })();
