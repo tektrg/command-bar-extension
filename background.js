@@ -42,7 +42,7 @@ async function toggleCommandBar() {
     // Insert CSS once per tab lifecycle
     if (tab.id && !cssInjectedTabs.has(tab.id)) {
       console.log('Injecting CSS...');
-      await chrome.scripting.executeScript({
+      await chrome.scripting.insertCSS({
         target: { tabId: tab.id },
         files: ["shadow-overlay.css"]
       });
@@ -216,6 +216,50 @@ async function search(query) {
   return [...tabResults, ...bookmarkResults, ...historyResults];
 }
 
+function buildRecentFromTabs(tabs, activeId) {
+  const filtered = activeId ? tabs.filter((t) => t.id !== activeId) : tabs;
+  return filtered.map((t) => ({
+    id: t.id,
+    title: t.title,
+    url: t.url,
+    source: "tab",
+    icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '',
+    type: 'tab',
+    windowId: t.windowId,
+    index: t.index,
+    lastAccessed: t.lastAccessed || 0
+  }));
+}
+
+async function getPinnedTabsWithStatusFromTabs(openTabs) {
+  if (typeof pinnedTabsModule === 'undefined') {
+    return [];
+  }
+
+  const pinnedTabs = await pinnedTabsModule.load();
+  const normalizedOpenTabs = openTabs
+    .filter((t) => pinnedTabsModule.normalizeUrl(t.url))
+    .map((t) => ({
+      tab: t,
+      normalizedUrl: pinnedTabsModule.normalizeUrl(t.url)
+    }));
+
+  return pinnedTabs
+    .filter((pinnedTab) => pinnedTabsModule.normalizeUrl(pinnedTab.url))
+    .map((pinnedTab) => {
+      const pinnedNormalizedUrl = pinnedTabsModule.normalizeUrl(pinnedTab.url);
+      const match = normalizedOpenTabs.find((t) => t.normalizedUrl === pinnedNormalizedUrl);
+      const activeTab = match?.tab;
+
+      return {
+        ...pinnedTab,
+        isActive: Boolean(activeTab),
+        tabId: activeTab?.id || null,
+        favicon: activeTab?.favIconUrl || pinnedTab.favicon
+      };
+    });
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "SEARCH") {
     const activeId = sender.tab?.id;
@@ -224,6 +268,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse(filtered);
     });
     return true; // async
+  } else if (msg.type === "GET_INITIAL_STATE") {
+    (async () => {
+      try {
+        const activeId = sender.tab?.id;
+        const tabs = await chrome.tabs.query({});
+        const pinnedTabsWithStatus = await getPinnedTabsWithStatusFromTabs(tabs);
+        sendResponse({
+          success: true,
+          recent: buildRecentFromTabs(tabs, activeId),
+          tabCount: tabs.length,
+          pinnedTabs: pinnedTabsWithStatus
+        });
+      } catch (error) {
+        console.error('Failed to get initial state:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true; // async
   } else if (msg.type === "RECENT") {
     chrome.tabs.query({}, (allTabs) => {
       const activeId = sender.tab?.id;
@@ -231,17 +293,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       
       // Don't pre-sort here - let content script sort by lastAccessed
       
-      const recent = filtered.map(t => ({ 
-        id: t.id, 
-        title: t.title, 
-        url: t.url, 
-        source: "tab", 
-        icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '', 
-        type: 'tab',
-        windowId: t.windowId,
-        index: t.index,
-        lastAccessed: t.lastAccessed || 0
-      }));
+      const recent = buildRecentFromTabs(filtered, null);
       sendResponse(recent);
     });
     return true;
@@ -313,20 +365,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     });
     return true; // async
   } else if (msg.type === "GET_PINNED_TABS") {
-    // Get pinned tabs with their active status using centralized storage
-    if (typeof pinnedTabsModule !== 'undefined') {
-      (async () => {
-        try {
-          const pinnedTabsWithStatus = await pinnedTabsModule.getPinnedTabsWithStatus();
-          sendResponse({ success: true, pinnedTabs: pinnedTabsWithStatus });
-        } catch (error) {
-          console.error('Failed to get pinned tabs:', error);
-          sendResponse({ success: false, error: error.message });
-        }
-      })();
-    } else {
-      sendResponse({ success: false, error: 'Pinned tabs module not available' });
-    }
+    (async () => {
+      try {
+        const tabs = await chrome.tabs.query({});
+        const pinnedTabsWithStatus = await getPinnedTabsWithStatusFromTabs(tabs);
+        sendResponse({ success: true, pinnedTabs: pinnedTabsWithStatus });
+      } catch (error) {
+        console.error('Failed to get pinned tabs:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
     return true; // async
   } else if (msg.type === "ADD_PINNED_TAB") {
     const { tabData } = msg;
