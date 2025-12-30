@@ -1,5 +1,13 @@
 // content.js
 (() => {
+  const TRACE = Boolean(window.__CMD_BAR_TRACE);
+  const now = () => (typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now());
+  const trace = (...args) => {
+    if (!TRACE) return;
+    console.log('[CmdBarTrace]', ...args);
+  };
+
+  const scriptStart = now();
   console.log('Content script loading...');
   if (window.__cmdBarInjected) {
     console.log('Content script already injected, skipping');
@@ -12,6 +20,7 @@
 const extensionOrigin = chrome?.runtime?.id ? `chrome-extension://${chrome.runtime.id}` : '';
 const isExtensionPage = window.location?.origin === extensionOrigin;
 const isPopupContext = Boolean(window.__CMD_BAR_POPUP) || (isExtensionPage && window.location?.pathname?.endsWith('/popup.html'));
+trace('loaded', { isPopupContext, isExtensionPage, href: window.location?.href, t: now() - scriptStart });
 
 // Constants
 const CONSTANTS = {
@@ -114,6 +123,7 @@ let deleteConfirm, lastConfirmIdx, confirmTimer;
 let stylesInjected = false;
 
 function createOverlay() {
+    const tCreateStart = now();
     // Update state references
     overlay = uiState.overlay;
     input = uiState.input;
@@ -128,29 +138,37 @@ function createOverlay() {
 
     // Load CSS into the document once
     if (!stylesInjected) {
-      const styleElement = document.createElement('style');
-      fetch(chrome.runtime.getURL('shadow-overlay.css'))
-        .then(response => response.text())
-        .then(css => {
-          styleElement.textContent = css;
-          document.head.appendChild(styleElement);
-          stylesInjected = true;
-        })
-        .catch(err => {
-          console.error('Failed to load shadow-overlay.css:', err);
-          // Fallback: use inline styles if CSS file fails to load
-          styleElement.textContent = `
-            #prd-stv-cmd-bar-overlay {
-              position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-              backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.3);
-              display: flex; align-items: center; justify-content: center;
-              z-index: 2147483647;
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            }
-          `;
-          document.head.appendChild(styleElement);
-          stylesInjected = true;
-        });
+      if (isPopupContext) {
+        // popup.html links shadow-overlay.css directly for faster paint
+        stylesInjected = true;
+      } else {
+        const styleElement = document.createElement('style');
+        styleElement.id = 'prd-stv-cmd-bar-styles';
+        const tCssStart = now();
+        fetch(chrome.runtime.getURL('shadow-overlay.css'))
+          .then(response => response.text())
+          .then(css => {
+            styleElement.textContent = css;
+            document.head.appendChild(styleElement);
+            stylesInjected = true;
+            trace('css_loaded', { ms: now() - tCssStart });
+          })
+          .catch(err => {
+            console.error('Failed to load shadow-overlay.css:', err);
+            // Fallback: use inline styles if CSS file fails to load
+            styleElement.textContent = `
+              #prd-stv-cmd-bar-overlay {
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.3);
+                display: flex; align-items: center; justify-content: center;
+                z-index: 2147483647;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              }
+            `;
+            document.head.appendChild(styleElement);
+            stylesInjected = true;
+          });
+      }
     }
 
     // Create overlay inside shadow DOM
@@ -186,12 +204,12 @@ function createOverlay() {
     tabCounterContainer.appendChild(document.createTextNode(' tabs'));
 
     // Create status message element
-    const statusMessage = document.createElement('span');
-    statusMessage.id = 'prd-stv-status-message';
-    statusMessage.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
+    const statusMessageEl = document.createElement('span');
+    statusMessageEl.id = 'prd-stv-status-message';
+    statusMessageEl.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
 
     uiState.statusBar.appendChild(tabCounterContainer);
-    uiState.statusBar.appendChild(statusMessage);
+    uiState.statusBar.appendChild(statusMessageEl);
     uiState.statusBar.style.display = 'flex';
     uiState.statusBar.style.alignItems = 'center';
 
@@ -213,9 +231,6 @@ function createOverlay() {
     container.appendChild(uiState.statusBar);
     uiState.overlay.appendChild(container);
 
-    // Load and render pinned tabs
-    loadPinnedTabs();
-
     // Close overlay when user clicks outside the container
     uiState.overlay.addEventListener('mousedown', (ev) => {
       if (ev.target === uiState.overlay) {
@@ -227,6 +242,7 @@ function createOverlay() {
 
     // Append overlay directly to document body
     document.body.appendChild(uiState.overlay);
+    trace('overlay_appended', { ms: now() - tCreateStart });
 
     // listeners
     uiState.input.addEventListener('keydown', onKeyDown);
@@ -235,16 +251,44 @@ function createOverlay() {
     uiState.input.addEventListener('input', onInput);
     uiState.input.focus();
 
-    // initial recent
-    messageService.recent((res) => {
-      uiState.setItems(res);
-      items = uiState.items;
-      selectedIdx = uiState.selectedIdx;
-      renderList();
-    });
+    // Initial data (tabs + pinned tabs + count) in one roundtrip to reduce cold-start overhead.
+    const statusMessage = document.getElementById('prd-stv-status-message');
+    if (statusMessage) statusMessage.textContent = 'Loading…';
 
-    // Get initial tab count
-    updateTabCount();
+    const tInitStart = now();
+    chrome.runtime.sendMessage({ type: 'GET_INITIAL_STATE' }, (response) => {
+      const err = chrome.runtime.lastError?.message;
+      trace('initial_state', { ms: now() - tInitStart, ok: response?.success, err });
+
+      if (err || !response || response.success === false) {
+        // Fallback to legacy init paths if the background doesn't support GET_INITIAL_STATE.
+        loadPinnedTabs();
+        messageService.recent((res) => {
+          uiState.setItems(res);
+          items = uiState.items;
+          selectedIdx = uiState.selectedIdx;
+          renderList();
+          if (statusMessage) statusMessage.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
+        });
+        updateTabCount();
+        return;
+      }
+
+      if (Array.isArray(response.pinnedTabs)) {
+        renderPinnedTabs(response.pinnedTabs);
+      }
+      if (typeof response.tabCount === 'number') {
+        applyTabCount(response.tabCount);
+      }
+      if (Array.isArray(response.recent)) {
+        uiState.setItems(response.recent);
+        items = uiState.items;
+        selectedIdx = uiState.selectedIdx;
+        renderList();
+      }
+
+      if (statusMessage) statusMessage.textContent = CONSTANTS.DEFAULT_STATUS_MSG;
+    });
   }
 
   function destroyOverlay() {
@@ -772,28 +816,30 @@ function showToast(message, duration = 2000) {
     return str.slice(0, part) + '...' + str.slice(str.length - part);
   }
 
+  function applyTabCount(count) {
+    const tabCounter = document.getElementById('prd-stv-tab-counter');
+    if (!tabCounter || typeof count !== 'number') return;
+
+    const oldCount = parseInt(tabCounter.textContent) || 0;
+    const newCount = count;
+
+    if (oldCount !== newCount) {
+      tabCounter.textContent = newCount;
+      tabCounter.classList.remove('prd-stv-tab-count-update');
+      void tabCounter.offsetWidth; // reflow to restart animation
+      tabCounter.classList.add('prd-stv-tab-count-update');
+    }
+  }
+
   // Update the tab counter in the status bar
   function updateTabCount() {
-    // Request tab count from background script
     chrome.runtime.sendMessage({ type: "GET_TAB_COUNT" }, (response) => {
       if (chrome.runtime.lastError) {
         console.error('Error getting tab count:', chrome.runtime.lastError);
         return;
       }
-
-      const tabCounter = document.getElementById('prd-stv-tab-counter');
-      if (tabCounter && response && response.count !== undefined) {
-        const oldCount = parseInt(tabCounter.textContent) || 0;
-        const newCount = response.count;
-
-        // Update the counter with animation if the count changed
-        if (oldCount !== newCount) {
-          tabCounter.textContent = newCount;
-          tabCounter.classList.remove('prd-stv-tab-count-update');
-          // Trigger reflow to restart animation
-          void tabCounter.offsetWidth;
-          tabCounter.classList.add('prd-stv-tab-count-update');
-        }
+      if (response && response.count !== undefined) {
+        applyTabCount(response.count);
       }
     });
   }
