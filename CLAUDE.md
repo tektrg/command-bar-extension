@@ -61,6 +61,27 @@ The extension follows Chrome Extension Manifest V3 architecture with three main 
 - **Event-Driven Updates**: Chrome API listeners trigger state updates and UI re-renders
 - **Error Handling**: Graceful error handling with user feedback via toast notifications
 
+**DOM Rendering Pattern**: Use the `h()` helper function from `js/dom.js` for creating DOM elements declaratively instead of innerHTML with template literals.
+
+```javascript
+// Preferred: Use h() helper for type-safe, XSS-safe element creation
+h('div', { class: 'prd-stv-cmd-item', 'data-id': item.id }, [
+  h('img', { class: 'prd-stv-favicon', src: favicon, onerror: handleError }),
+  h('span', { class: 'prd-stv-title' }, item.title),
+  h('button', { class: 'prd-stv-menu-btn', onclick: () => showMenu() }, '...')
+])
+
+// Avoid: innerHTML with template literals (XSS risk, no type safety)
+div.innerHTML = `<div class="item"><span>${title}</span></div>`
+```
+
+Key features of `h()`:
+- **Event handlers**: `onclick`, `onerror`, etc. attached as functions
+- **Style objects**: `style: { display: 'flex', gap: '8px' }`
+- **Data attributes**: `'data-id': item.id`
+- **Conditional children**: `showBtn && h('button', {}, 'Click')`
+- **Auto text escaping**: Strings passed as children are safely escaped
+
 ## Development Commands
 
 Since this is a vanilla JavaScript Chrome extension without build tools, there are no npm/build commands. Development involves:
