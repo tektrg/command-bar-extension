@@ -2,31 +2,62 @@
 
 const rendererUIActions = {
   // Context menu management
-  showContextMenu: (event, bookmark, itemElement) => {
+  showContextMenu: async (event, bookmark, itemElement) => {
     rendererUIActions.closeContextMenu();
 
-    const contextMenu = document.createElement('div');
-    contextMenu.className = 'prd-stv-context-menu';
-    contextMenu.innerHTML = `
-      <div class="prd-stv-context-item" data-action="rename">
-        <span>Rename</span>
-      </div>
-      <div class="prd-stv-context-item" data-action="move">
-        <span>Move to...</span>
-      </div>
-    `;
+    // Check if bookmark has a date
+    let hasDate = false;
+    try {
+      if (window.datedLinksModule) {
+        hasDate = await window.datedLinksModule.hasDate(bookmark.url);
+      }
+    } catch (error) {
+      console.warn('Failed to check dated status:', error);
+    }
+
+    const dateActionEl = hasDate ?
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
+        h('span', {}, 'Remove date')) :
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date' },
+        h('span', {}, 'Add date'));
 
     const buttonRect = event.target.getBoundingClientRect();
-    contextMenu.style.position = 'fixed';
-    contextMenu.style.left = `${buttonRect.left - 120}px`;
-    contextMenu.style.top = `${buttonRect.bottom + 4}px`;
-    contextMenu.style.zIndex = '10000';
+    const contextMenu = h('div', {
+      class: 'prd-stv-context-menu',
+      style: {
+        position: 'fixed',
+        left: `${buttonRect.left - 120}px`,
+        top: `${buttonRect.bottom + 4}px`,
+        zIndex: '10000'
+      }
+    }, [
+      dateActionEl,
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'rename' },
+        h('span', {}, 'Rename')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'move' },
+        h('span', {}, 'Move to...'))
+    ]);
 
     document.body.appendChild(contextMenu);
 
-    contextMenu.addEventListener('click', (e) => {
+    contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-      if (action === 'rename') {
+      if (action === 'add-date') {
+        const itemData = {
+          url: bookmark.url,
+          title: bookmark.title || 'Untitled',
+          favicon: bookmark.favicon || '',
+          itemType: 'bookmark',
+          itemId: bookmark.id
+        };
+        window.dateModal.show(itemData);
+      } else if (action === 'remove-date') {
+        await window.datedLinksModule.removeDate(bookmark.url);
+        window.utils.showToast('Date removed');
+        if (window.state && window.elements) {
+          await window.renderer.render(window.state, window.elements);
+        }
+      } else if (action === 'rename') {
         rendererUIActions.startRename(bookmark, itemElement);
       } else if (action === 'move') {
         rendererUIActions.showMoveDialog(bookmark);
@@ -46,46 +77,78 @@ const rendererUIActions = {
     }
   },
 
-  showFolderContextMenu: (event, folder) => {
+  showFolderContextMenu: async (event, folder) => {
     rendererUIActions.closeContextMenu();
 
-    const contextMenu = document.createElement('div');
-    contextMenu.className = 'prd-stv-context-menu';
+    // Check if folder has a date (use synthetic URL for folders)
+    let hasDate = false;
+    const folderUrl = `folder://bookmark/${folder.id}`;
+    try {
+      if (window.datedLinksModule) {
+        hasDate = await window.datedLinksModule.hasDate(folderUrl);
+      }
+    } catch (error) {
+      console.warn('Failed to check dated status:', error);
+    }
+
+    const dateActionEl = hasDate ?
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
+        h('span', {}, 'Remove date')) :
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date' },
+        h('span', {}, 'Add date'));
 
     const openCount = window.getOpenBookmarkCountInFolder(folder.id, window.state);
-    const closeTabsItem = openCount > 0 ?
-      '<div class="prd-stv-context-item" data-action="close-tabs"><span>Close tabs</span></div>' : '';
-
-    contextMenu.innerHTML = `
-      <div class="prd-stv-context-item" data-action="save-tab-here">
-        <span>Save tab here</span>
-      </div>
-      ${closeTabsItem}
-      <div class="prd-stv-context-item" data-action="new-folder">
-        <span>New folder...</span>
-      </div>
-      <div class="prd-stv-context-item" data-action="rename">
-        <span>Rename</span>
-      </div>
-      <div class="prd-stv-context-item" data-action="move">
-        <span>Move to...</span>
-      </div>
-      <div class="prd-stv-context-item" data-action="delete-folder" style="color: #ff6b6b;">
-        <span>Delete folder</span>
-      </div>
-    `;
+    const closeTabsEl = openCount > 0 ?
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'close-tabs' },
+        h('span', {}, 'Close tabs')) : null;
 
     const buttonRect = event.target.getBoundingClientRect();
-    contextMenu.style.position = 'fixed';
-    contextMenu.style.left = `${buttonRect.left - 120}px`;
-    contextMenu.style.top = `${buttonRect.bottom + 4}px`;
-    contextMenu.style.zIndex = '10000';
+    const contextMenu = h('div', {
+      class: 'prd-stv-context-menu',
+      style: {
+        position: 'fixed',
+        left: `${buttonRect.left - 120}px`,
+        top: `${buttonRect.bottom + 4}px`,
+        zIndex: '10000'
+      }
+    }, [
+      dateActionEl,
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'save-tab-here' },
+        h('span', {}, 'Save tab here')),
+      closeTabsEl,
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'new-folder' },
+        h('span', {}, 'New folder...')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'rename' },
+        h('span', {}, 'Rename')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'move' },
+        h('span', {}, 'Move to...')),
+      h('div', {
+        class: 'prd-stv-context-item',
+        'data-action': 'delete-folder',
+        style: { color: '#ff6b6b' }
+      }, h('span', {}, 'Delete folder'))
+    ]);
 
     document.body.appendChild(contextMenu);
 
-    contextMenu.addEventListener('click', (e) => {
+    contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-      if (action === 'save-tab-here') {
+      if (action === 'add-date') {
+        const itemData = {
+          url: folderUrl,
+          title: folder.title || 'Untitled Folder',
+          favicon: '',
+          itemType: 'folder',
+          itemId: folder.id
+        };
+        window.dateModal.show(itemData);
+      } else if (action === 'remove-date') {
+        await window.datedLinksModule.removeDate(folderUrl);
+        window.utils.showToast('Date removed');
+        if (window.state && window.elements) {
+          await window.renderer.render(window.state, window.elements);
+        }
+      } else if (action === 'save-tab-here') {
         window.saveActiveTabToFolder(folder.id);
       } else if (action === 'close-tabs') {
         window.closeTabsInFolder(folder.id);
@@ -119,31 +182,63 @@ const rendererUIActions = {
       console.warn('Failed to check pinned status:', error);
     }
 
-    const contextMenu = document.createElement('div');
-    contextMenu.className = 'prd-stv-context-menu';
-    contextMenu.innerHTML = `
-      <div class="prd-stv-context-item" data-action="${isPinned ? 'unpin' : 'pin'}">
-        <span>${isPinned ? 'Unpin Tab' : 'Pin Tab'}</span>
-      </div>
-      <div class="prd-stv-context-item" data-action="move-to-folder">
-        <span>Move to...</span>
-      </div>
-      <div class="prd-stv-context-item" data-action="duplicate">
-        <span>Duplicate Tab</span>
-      </div>
-    `;
+    // Check if tab has a date
+    let hasDate = false;
+    try {
+      if (window.datedLinksModule) {
+        hasDate = await window.datedLinksModule.hasDate(tab.url);
+      }
+    } catch (error) {
+      console.warn('Failed to check dated status:', error);
+    }
+
+    const dateActionEl = hasDate ?
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
+        h('span', {}, 'Remove date')) :
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date' },
+        h('span', {}, 'Add date'));
 
     const buttonRect = event.target.getBoundingClientRect();
-    contextMenu.style.position = 'fixed';
-    contextMenu.style.left = `${buttonRect.left - 120}px`;
-    contextMenu.style.top = `${buttonRect.bottom + 4}px`;
-    contextMenu.style.zIndex = '10000';
+    const contextMenu = h('div', {
+      class: 'prd-stv-context-menu',
+      style: {
+        position: 'fixed',
+        left: `${buttonRect.left - 120}px`,
+        top: `${buttonRect.bottom + 4}px`,
+        zIndex: '10000'
+      }
+    }, [
+      dateActionEl,
+      h('div', {
+        class: 'prd-stv-context-item',
+        'data-action': isPinned ? 'unpin' : 'pin'
+      }, h('span', {}, isPinned ? 'Unpin Tab' : 'Pin Tab')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'move-to-folder' },
+        h('span', {}, 'Move to...')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'duplicate' },
+        h('span', {}, 'Duplicate Tab'))
+    ]);
 
     document.body.appendChild(contextMenu);
 
     contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-      if (action === 'pin') {
+      if (action === 'add-date') {
+        const itemData = {
+          url: tab.url,
+          title: tab.title || 'Untitled',
+          favicon: tab.favIconUrl || '',
+          itemType: 'tab',
+          itemId: tab.id
+        };
+        window.dateModal.show(itemData);
+      } else if (action === 'remove-date') {
+        await window.datedLinksModule.removeDate(tab.url);
+        window.utils.showToast('Date removed');
+        if (window.state && window.elements) {
+          await window.renderer.render(window.state, window.elements);
+        }
+      } else if (action === 'pin') {
         try {
           const tabData = {
             url: tab.url,
@@ -209,22 +304,21 @@ const rendererUIActions = {
   showHistoryContextMenu: (event, historyItem, itemElement) => {
     rendererUIActions.closeContextMenu();
 
-    const contextMenu = document.createElement('div');
-    contextMenu.className = 'prd-stv-context-menu';
-    contextMenu.innerHTML = `
-      <div class="prd-stv-context-item" data-action="open-new-tab">
-        <span>Open in New Tab</span>
-      </div>
-      <div class="prd-stv-context-item" data-action="remove-from-history">
-        <span>Remove from History</span>
-      </div>
-    `;
-
     const buttonRect = event.target.getBoundingClientRect();
-    contextMenu.style.position = 'fixed';
-    contextMenu.style.left = `${buttonRect.left - 120}px`;
-    contextMenu.style.top = `${buttonRect.bottom + 4}px`;
-    contextMenu.style.zIndex = '10000';
+    const contextMenu = h('div', {
+      class: 'prd-stv-context-menu',
+      style: {
+        position: 'fixed',
+        left: `${buttonRect.left - 120}px`,
+        top: `${buttonRect.bottom + 4}px`,
+        zIndex: '10000'
+      }
+    }, [
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'open-new-tab' },
+        h('span', {}, 'Open in New Tab')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-from-history' },
+        h('span', {}, 'Remove from History'))
+    ]);
 
     document.body.appendChild(contextMenu);
 
@@ -360,41 +454,121 @@ const rendererUIActions = {
     const existingDialog = document.querySelector('.prd-stv-move-dialog');
     if (existingDialog) existingDialog.remove();
 
-    const overlay = document.createElement('div');
-    overlay.className = 'prd-stv-move-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:20000;display:flex;align-items:center;justify-content:center;';
-
-    const dialog = document.createElement('div');
-    dialog.className = 'prd-stv-move-dialog';
-    dialog.style.cssText = 'background:#2b2b2b;border-radius:15px;padding:20px;width:400px;max-width:90%;max-height:80%;color:#f5f5f5;';
-
     const isTab = bookmark._isTab;
     const isFolder = !bookmark.url && !bookmark._isTab;
     const actionText = isTab ? 'Save' : 'Move';
     const itemType = isFolder ? 'folder' : (isTab ? 'bookmark' : 'bookmark');
     const titleText = isTab ? `Save as bookmark` : `Move "${bookmark.title}" to ${itemType === 'folder' ? 'parent folder' : 'folder'}`;
 
-    const titleInputHTML = isTab ? `
-      <input type="text" class="prd-stv-title-input" placeholder="Bookmark title"
-        value="${window.utils.escapeHtml(bookmark.title || '')}"
-        style="width:100%;padding:8px;background:#3a3a3a;border:1px solid #555;color:#fff;border-radius:15px;margin-bottom:12px;box-sizing:border-box;font-size:14px;">
-    ` : '';
+    const titleInputEl = isTab ?
+      h('input', {
+        type: 'text',
+        class: 'prd-stv-title-input',
+        placeholder: 'Bookmark title',
+        value: bookmark.title || '',
+        style: {
+          width: '100%',
+          padding: '8px',
+          background: '#3a3a3a',
+          border: '1px solid #555',
+          color: '#fff',
+          borderRadius: '15px',
+          marginBottom: '12px',
+          boxSizing: 'border-box',
+          fontSize: '14px'
+        }
+      }) : null;
 
-    dialog.innerHTML = `
-      <h3 style="margin:0 0 16px 0;font-size:16px;">${titleText}</h3>
-      ${titleInputHTML}
-      <input type="text" class="prd-stv-folder-search" placeholder="Search folders..."
-        style="width:100%;padding:8px;background:#3a3a3a;border:1px solid #555;color:#fff;border-radius:15px;margin-bottom:16px;box-sizing:border-box;">
-      <div class="prd-stv-folder-list" style="max-height:300px;overflow-y:auto;border:1px solid #555;border-radius:15px;">
-        <div style="padding:16px;text-align:center;color:#999;">Loading folders...</div>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
-        <button class="prd-stv-cancel-btn" style="padding:8px 16px;background:#555;color:#fff;border:none;border-radius:15px;cursor:pointer;">Cancel</button>
-        <button class="prd-stv-move-btn" style="padding:8px 16px;background:#b9a079;color:#000;border:none;border-radius:15px;cursor:pointer;" disabled>${actionText}</button>
-      </div>
-    `;
+    const dialog = h('div', {
+      class: 'prd-stv-move-dialog',
+      style: {
+        background: '#2b2b2b',
+        borderRadius: '15px',
+        padding: '20px',
+        width: '400px',
+        maxWidth: '90%',
+        maxHeight: '80%',
+        color: '#f5f5f5'
+      }
+    }, [
+      h('h3', { style: { margin: '0 0 16px 0', fontSize: '16px' } }, titleText),
+      titleInputEl,
+      h('input', {
+        type: 'text',
+        class: 'prd-stv-folder-search',
+        placeholder: 'Search folders...',
+        style: {
+          width: '100%',
+          padding: '8px',
+          background: '#3a3a3a',
+          border: '1px solid #555',
+          color: '#fff',
+          borderRadius: '15px',
+          marginBottom: '16px',
+          boxSizing: 'border-box'
+        }
+      }),
+      h('div', {
+        class: 'prd-stv-folder-list',
+        style: {
+          maxHeight: '300px',
+          overflowY: 'auto',
+          border: '1px solid #555',
+          borderRadius: '15px'
+        }
+      }, h('div', {
+        style: { padding: '16px', textAlign: 'center', color: '#999' }
+      }, 'Loading folders...')),
+      h('div', {
+        style: {
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '8px',
+          marginTop: '16px'
+        }
+      }, [
+        h('button', {
+          class: 'prd-stv-cancel-btn',
+          style: {
+            padding: '8px 16px',
+            background: '#555',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '15px',
+            cursor: 'pointer'
+          }
+        }, 'Cancel'),
+        h('button', {
+          class: 'prd-stv-move-btn',
+          disabled: true,
+          style: {
+            padding: '8px 16px',
+            background: '#b9a079',
+            color: '#000',
+            border: 'none',
+            borderRadius: '15px',
+            cursor: 'pointer'
+          }
+        }, actionText)
+      ])
+    ]);
 
-    overlay.appendChild(dialog);
+    const overlay = h('div', {
+      class: 'prd-stv-move-overlay',
+      style: {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        width: '100%',
+        height: '100%',
+        background: 'rgba(0,0,0,0.5)',
+        zIndex: '20000',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }
+    }, dialog);
+
     document.body.appendChild(overlay);
 
     rendererUIActions.setupMoveDialog(dialog, bookmark, overlay);
@@ -591,13 +765,39 @@ const rendererUIActions = {
   },
 
   renderFolderList: (container, folders, onSelect) => {
-    container.innerHTML = folders.map((folder, index) => `
-      <div class="prd-stv-folder-item" data-folder-id="${folder.id}" data-index="${index}"
-        style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #3a3a3a;display:flex;flex-direction:column;">
-        <div style="font-size:14px;color:#f5f5f5;">${window.utils.escapeHtml(folder.title)}</div>
-        <div style="font-size:12px;color:#999;margin-top:2px;">${window.utils.escapeHtml(folder.path)}</div>
-      </div>
-    `).join('') || '<div style="padding:16px;text-align:center;color:#999;">No folders found</div>';
+    // Clear existing content
+    container.innerHTML = '';
+
+    if (folders.length === 0) {
+      container.appendChild(
+        h('div', {
+          style: { padding: '16px', textAlign: 'center', color: '#999' }
+        }, 'No folders found')
+      );
+    } else {
+      folders.forEach((folder, index) => {
+        const folderItem = h('div', {
+          class: 'prd-stv-folder-item',
+          'data-folder-id': folder.id,
+          'data-index': index,
+          style: {
+            padding: '8px 12px',
+            cursor: 'pointer',
+            borderBottom: '1px solid #3a3a3a',
+            display: 'flex',
+            flexDirection: 'column'
+          }
+        }, [
+          h('div', {
+            style: { fontSize: '14px', color: '#f5f5f5' }
+          }, folder.title),
+          h('div', {
+            style: { fontSize: '12px', color: '#999', marginTop: '2px' }
+          }, folder.path)
+        ]);
+        container.appendChild(folderItem);
+      });
+    }
 
     container.addEventListener('click', (e) => {
       const folderItem = e.target.closest('.prd-stv-folder-item');

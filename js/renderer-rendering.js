@@ -117,10 +117,165 @@ const rendererRendering = {
     return parentFolder.querySelector('.bm-children');
   },
 
+  // Dated Items Rendering
+  renderDatedItemsSection: async (state, elements) => {
+    if (!window.datedLinksModule) return;
+
+    try {
+      const datedItems = await window.datedLinksModule.getSortedByDate();
+
+      if (!datedItems || datedItems.length === 0) return;
+
+      // Filter by search query if present
+      let filteredItems = datedItems;
+      if (state.query && state.query.trim()) {
+        const query = state.query.toLowerCase();
+        filteredItems = datedItems.filter(item => {
+          const hay = ((item.title || '') + ' ' + (item.url || '')).toLowerCase();
+          return hay.includes(query);
+        });
+      }
+
+      if (filteredItems.length === 0) return;
+
+      // Create header
+      const header = document.createElement('div');
+      header.className = 'prd-stv-window-separator';
+      header.innerHTML = `
+        <span class="material-icons-round" style="font-size: 12px; margin-right: 6px;">event</span>
+        <span>Dated Items</span>
+      `;
+      elements.combined.appendChild(header);
+
+      // Render each dated item
+      filteredItems.forEach(item => {
+        const element = rendererRendering.renderDatedItem(item, state);
+        elements.combined.appendChild(element);
+      });
+    } catch (error) {
+      console.error('[Renderer] Failed to render dated items:', error);
+    }
+  },
+
+  renderDatedItem: (item, state) => {
+    const isOverdue = window.datedLinksModule.isOverdue(item.date);
+    const isFolder = item.itemType === 'folder' || item.url.startsWith('folder://bookmark/');
+
+    // Check if this dated item has an associated open tab
+    const relatedTabId = item.itemId ? state.bookmarkTabRelationships[item.itemId] : null;
+    const hasOpenTab = !!relatedTabId;
+    const relatedTab = hasOpenTab ? state.itemMaps.tabs.get(relatedTabId) : null;
+    const isRelatedTabActive = !!(relatedTab && relatedTab.active);
+
+    // Build class name
+    const classNames = ['prd-stv-cmd-item', 'dated-item'];
+    if (isOverdue) classNames.push('dated-item-overdue');
+    if (hasOpenTab) classNames.push('bookmark-highlighted');
+    if (isRelatedTabActive) classNames.push('active-tab');
+
+    const formattedDate = window.datedLinksModule.formatDate(item.date);
+    const dateClass = isOverdue ? 'dated-item-date overdue' : 'dated-item-date';
+
+    // Button icon and title based on whether tab is open
+    const buttonIcon = hasOpenTab ? 'remove' : 'check';
+    const buttonTitle = hasOpenTab ? 'Close tab' : 'Remove date';
+    const actionClass = hasOpenTab ? 'close-tab-btn' : 'remove-date-btn';
+
+    // Create icon element
+    const iconEl = isFolder
+      ? h('span', {
+          class: 'material-icons-round prd-stv-folder-icon',
+          style: { fontSize: '18px', marginRight: '8px', color: '#b9a079' }
+        }, 'folder')
+      : h('img', {
+          class: 'prd-stv-favicon',
+          src: window.utils.getFavicon({ type: window.CONSTANTS.ITEM_TYPES.BOOKMARK, url: item.url }),
+          onerror: (e) => { e.target.src = window.CONSTANTS.ICONS.FALLBACK; }
+        });
+
+    // Create title element (using innerHTML for highlightMatches which returns HTML string)
+    const titleEl = h('span', { class: 'prd-stv-title' });
+    titleEl.innerHTML = window.utils.highlightMatches(item.title || item.url, state.query || '');
+
+    // Build the element using h()
+    const div = h('div', {
+      class: classNames.join(' '),
+      'data-id': item.id,
+      'data-url': item.url,
+      'data-itemType': 'dated',
+      title: `${item.title}\n${isFolder ? 'Folder' : item.url}\nDate: ${item.date}`
+    }, [
+      h('div', { style: { display: 'flex', flex: '1', alignItems: 'center', minWidth: '0' } }, [
+        iconEl,
+        titleEl,
+        h('span', {
+          class: dateClass,
+          'data-action': 'update-date',
+          title: 'Click to update date',
+          style: { cursor: 'pointer' }
+        }, formattedDate)
+      ]),
+      h('div', { class: 'prd-stv-item-controls' }, [
+        h('button', { class: 'prd-stv-menu-btn', title: 'More options' }, '\u2026'),
+        h('button', { class: `prd-stv-close-btn ${actionClass}`, title: buttonTitle }, [
+          h('span', { class: 'material-icons-round' }, buttonIcon)
+        ])
+      ])
+    ]);
+
+    // Event handler
+    div.addEventListener('click', async (e) => {
+      if (e.target.classList.contains('prd-stv-close-btn') || e.target.closest('.prd-stv-close-btn')) {
+        e.stopPropagation();
+        if (hasOpenTab) {
+          window.closeTabFromBookmark(item.itemId);
+        } else {
+          await window.datedLinksModule.removeDate(item.url);
+          window.utils.showToast('Date removed');
+          await window.renderer.render(window.state, window.elements);
+        }
+      } else if (e.target.dataset.action === 'update-date' || e.target.closest('[data-action="update-date"]')) {
+        e.stopPropagation();
+        const itemData = {
+          url: item.url,
+          title: item.title,
+          favicon: item.favicon,
+          itemType: item.itemType,
+          itemId: item.itemId
+        };
+        window.dateModal.show(itemData);
+      } else if (e.target.classList.contains('prd-stv-menu-btn')) {
+        e.stopPropagation();
+        if (isFolder) {
+          const fakeFolder = { id: item.itemId, title: item.title, _isDated: true };
+          window.rendererUIActions.showFolderContextMenu(e, fakeFolder);
+        } else {
+          const fakeBookmark = { id: item.itemId, title: item.title, url: item.url, _isDated: true };
+          window.rendererUIActions.showContextMenu(e, fakeBookmark, div);
+        }
+      } else {
+        if (isFolder) {
+          const folderId = item.itemId;
+          if (folderId) {
+            window.folderState.toggleExpanded(folderId, state, window.storage);
+            await window.renderer.render(state, window.elements);
+          }
+        } else {
+          window.openUrl(item.url, e, item.itemId);
+        }
+      }
+    });
+
+    return div;
+  },
+
   renderCombined: async (state, elements) => {
     elements.combined.innerHTML = '';
 
-    // Render bookmarks first
+    // Render dated items first (at the top)
+    await rendererRendering.renderDatedItemsSection(state, elements);
+
+    // Render bookmarks
     let roots;
     if (state.filteredTree.length || state.query) {
       roots = state.filteredTree;
@@ -452,6 +607,7 @@ const rendererRendering = {
     const query = state.query;
     const buttonText = hasOpenTab ? 'remove' : 'check';
     const buttonTitle = hasOpenTab ? 'Close tab' : 'Delete bookmark';
+    const actionClass = hasOpenTab ? 'close-tab-btn' : 'delete-bookmark-btn';
 
     div.innerHTML = `
       <div style="display:flex;flex:1;align-items:center;min-width:0;">
@@ -460,7 +616,7 @@ const rendererRendering = {
       </div>
       <div class="prd-stv-item-controls">
         <button class="prd-stv-menu-btn" title="More options" data-bookmark-id="${node.id}">⋯</button>
-        <button class="prd-stv-close-btn ${hasOpenTab ? 'close-tab-btn' : ''}" title="${buttonTitle}">
+        <button class="prd-stv-close-btn ${actionClass}" title="${buttonTitle}">
           <span class="material-icons-round">${buttonText}</span>
         </button>
       </div>
