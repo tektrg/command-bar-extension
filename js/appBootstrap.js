@@ -767,12 +767,20 @@
 
     // Listen for storage changes to sync between windows
     chrome.storage.onChanged.addListener(async (changes, namespace) => {
-      if (namespace === 'local' && changes[window.CONSTANTS.STORAGE_KEYS.BOOKMARK_TAB_LINKS]) {
-        // Another window updated bookmark-tab relationships
-        const newRelationships = changes[window.CONSTANTS.STORAGE_KEYS.BOOKMARK_TAB_LINKS].newValue;
-        if (newRelationships && typeof newRelationships === 'object') {
-          state.bookmarkTabRelationships = newRelationships;
-          // Re-render to update bookmark highlighting across windows
+      if (namespace === 'local') {
+        if (changes[window.CONSTANTS.STORAGE_KEYS.BOOKMARK_TAB_LINKS]) {
+          // Another window updated bookmark-tab relationships
+          const newRelationships = changes[window.CONSTANTS.STORAGE_KEYS.BOOKMARK_TAB_LINKS].newValue;
+          if (newRelationships && typeof newRelationships === 'object') {
+            state.bookmarkTabRelationships = newRelationships;
+            // Re-render to update bookmark highlighting across windows
+            await window.renderer.render(state, elements);
+          }
+        }
+
+        // Handle dated links changes for cross-window sync
+        if (changes[window.CONSTANTS.STORAGE_KEYS.DATED_LINKS]) {
+          console.log('[AppBootstrap] Dated links changed, re-rendering');
           await window.renderer.render(state, elements);
         }
       }

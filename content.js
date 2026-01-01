@@ -498,9 +498,14 @@ function onGlobalKeyDown(e) {
     }
   }
   
-  function removeItemFromList() {
-    items.splice(selectedIdx, 1);
-    if (selectedIdx >= items.length) selectedIdx = items.length - 1;
+  function removeItemFromList(index = selectedIdx) {
+    if (index < 0 || index >= items.length) return;
+    items.splice(index, 1);
+    if (selectedIdx >= items.length) {
+      selectedIdx = items.length - 1;
+    } else if (selectedIdx > index) {
+      selectedIdx = Math.max(0, selectedIdx - 1);
+    }
     renderList();
     // Update tab count after removing an item
     updateTabCount();
@@ -630,11 +635,13 @@ function showDeleteConfirm() {
 
     const iconHtml = getIconHtml(item);
     
-    // Add 3-dots menu for bookmarks and tabs
+    // Add controls (check + 3-dots). In popup context, tabs get a close button on the left.
     const isBookmark = item.type === 'bookmark';
     const isTab = item.type === 'tab';
+    const showCloseBtn = isPopupContext && isTab;
     const controlsHtml = (isBookmark || isTab) ? `
       <div class="prd-stv-item-controls" style="opacity:0;transition:opacity 0.2s ease;margin-left:auto;padding-left:8px;">
+        ${showCloseBtn ? `<button class="prd-stv-close-btn" title="Close tab" data-close-tab-id="${item.id}">✓</button>` : ''}
         <button class="prd-stv-menu-btn" title="More options" ${isBookmark ? `data-bookmark-id="${item.id}"` : `data-tab-id="${item.id}"`}
           style="background:transparent;border:none;color:#9b9b9b;font-size:16px;cursor:pointer;padding:4px;border-radius:15px;">⋯</button>
       </div>
@@ -661,7 +668,13 @@ function showDeleteConfirm() {
     
     // Add click handler
     div.addEventListener('click', (e) => {
-      if (e.target.classList.contains('prd-stv-menu-btn')) {
+      if (e.target.classList.contains('prd-stv-close-btn')) {
+        e.stopPropagation();
+        if (item.type === 'tab') {
+          messageService.delete(item);
+          removeItemFromList(index);
+        }
+      } else if (e.target.classList.contains('prd-stv-menu-btn')) {
         e.stopPropagation();
         if (item.type === 'bookmark') {
           showBookmarkContextMenu(e, item, div);

@@ -5,12 +5,59 @@ const cssInjectedTabs = new Set();
 // Import modules for pinned tabs functionality
 importScripts('js/pinnedTabs.js');
 importScripts('js/autoPinSync.js');
+importScripts('js/datedLinks.js');
+
+// Function to update the badge based on items due today
+async function updateDueTodayBadge() {
+  try {
+    console.log('[Badge] updateDueTodayBadge called');
+
+    if (typeof self.datedLinksModule === 'undefined') {
+      console.warn('[Badge] datedLinksModule not available');
+      return;
+    }
+
+    const datedLinks = await self.datedLinksModule.load();
+    console.log('[Badge] Loaded dated links:', datedLinks.length, 'items');
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    console.log('[Badge] Today is:', today.toISOString());
+
+    // Count items due exactly today (not overdue)
+    const dueTodayItems = datedLinks.filter(item => {
+      const itemDate = new Date(item.date);
+      itemDate.setHours(0, 0, 0, 0);
+      const isToday = itemDate.getTime() === today.getTime();
+      console.log(`[Badge] Item "${item.title}" date: ${item.date}, isToday: ${isToday}`);
+      return isToday;
+    });
+
+    const dueTodayCount = dueTodayItems.length;
+    console.log('[Badge] Items due today:', dueTodayCount);
+
+    if (dueTodayCount > 0) {
+      // Show red badge with count
+      await chrome.action.setBadgeText({ text: String(dueTodayCount) });
+      await chrome.action.setBadgeBackgroundColor({ color: '#FF4444' });
+      console.log(`[Badge] Set badge to ${dueTodayCount} items due today`);
+    } else {
+      // Clear badge
+      await chrome.action.setBadgeText({ text: '' });
+      console.log('[Badge] Cleared badge - no items due today');
+    }
+  } catch (error) {
+    console.error('[Badge] Failed to update badge:', error);
+  }
+}
 
 // Initialize auto-pin sync on extension startup
 chrome.runtime.onStartup.addListener(() => {
   if (self.autoPinSync) {
     self.autoPinSync.init();
   }
+  // Update badge on startup
+  updateDueTodayBadge();
 });
 
 // Also initialize on extension install
@@ -18,6 +65,8 @@ chrome.runtime.onInstalled.addListener(() => {
   if (self.autoPinSync) {
     self.autoPinSync.init();
   }
+  // Update badge on install
+  updateDueTodayBadge();
 });
 
 async function toggleCommandBar() {
@@ -127,7 +176,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   await toggleCommandBar();
 });
 
-// Listen for tab events to update tab count
+// Listen for tab events to update tab count and badge
 chrome.tabs.onCreated.addListener(() => {
   // Send message to all tabs to update their tab count
   chrome.tabs.query({}, (tabs) => {
@@ -137,6 +186,8 @@ chrome.tabs.onCreated.addListener(() => {
       }
     });
   });
+  // Update badge when tabs are created
+  updateDueTodayBadge();
 });
 
 chrome.tabs.onRemoved.addListener(() => {
@@ -148,6 +199,8 @@ chrome.tabs.onRemoved.addListener(() => {
       }
     });
   });
+  // Update badge when tabs are removed
+  updateDueTodayBadge();
 });
 
 // Clear CSS tracking when tabs close
@@ -445,5 +498,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ success: true });
     });
     return true; // async
+  }
+});
+
+// Listen for storage changes to update badge when dated links are modified
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'local' && changes.datedLinks) {
+    console.log('[Badge] Dated links changed, updating badge');
+    updateDueTodayBadge();
   }
 });
