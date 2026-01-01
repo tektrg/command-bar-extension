@@ -325,8 +325,23 @@ img.prd-stv-favicon {
 }
 
 .prd-stv-close-btn:hover {
-  background: #528263 !important;
-  color: white;
+  background: #383838 !important;
+  color: #7ed321;
+}
+
+.prd-stv-close-btn.delete-bookmark-btn:hover {
+  background: #2f4134 !important;
+  color: #7ed321;
+}
+
+.prd-stv-close-btn.close-tab-btn:hover {
+  background: #4a2e2e !important;
+  color: #ff6b6b;
+}
+
+.prd-stv-close-btn.remove-date-btn:hover {
+  background: #3d3d3d !important;
+  color: #b9a079;
 }
 
 /* Side panel header */
@@ -444,6 +459,12 @@ img.prd-stv-favicon {
   gap: 2px;
   display: none;
   transition: opacity 0.2s ease;
+  button.prd-stv-menu-btn {
+    outline: none;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
 }
 
 .prd-stv-cmd-item:hover .prd-stv-item-controls,
@@ -936,4 +957,174 @@ img.prd-stv-favicon {
 
 .pinned-tab-action:hover {
   background: rgba(255, 0, 0, 0.8);
+}
+
+/* ===== DATED ITEMS STYLES ===== */
+
+.dated-item {
+  /* border-left: 3px solid #b9a079; */
+  margin-left: 0;
+  padding-left: 8px !important;
+}
+
+.dated-item:hover {
+  /* border-left-color: #d4c49a; */
+}
+
+.dated-item-date {
+  font-size: 11px;
+  color: #b9a079;
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: rgba(185, 160, 121, 0.15);
+  border-radius: 4px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.dated-item-date:hover {
+  background: rgba(185, 160, 121, 0.25);
+  transform: scale(1.05);
+}
+
+.dated-item-date.overdue {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.15);
+}
+
+.dated-item-date.overdue:hover {
+  background: rgba(255, 107, 107, 0.25);
+}
+
+.dated-item-overdue {
+  /* border-left-color: #ff6b6b; */
+}
+
+.dated-item-overdue:hover {
+  /* border-left-color: #ff8585; */
+}
+
+/* ===== CALENDAR PICKER STYLES ===== */
+
+.prd-stv-date-modal-content {
+  min-width: 320px;
+}
+
+#prd-stv-calendar-container {
+  background: #2b2b2b;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.prd-stv-calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.prd-stv-calendar-month-year {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f5f5f5;
+  text-align: center;
+  flex: 1;
+}
+
+.prd-stv-calendar-nav {
+  background: transparent;
+  border: none;
+  color: #b9a079;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.prd-stv-calendar-nav:hover {
+  background: rgba(185, 160, 121, 0.15);
+}
+
+.prd-stv-calendar-nav .material-icons-round {
+  font-size: 20px;
+}
+
+.prd-stv-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.prd-stv-calendar-weekdays > div {
+  text-align: center;
+  font-size: 11px;
+  color: #999;
+  font-weight: 600;
+  padding: 4px;
+}
+
+.prd-stv-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.prd-stv-calendar-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #f5f5f5;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: transparent;
+  position: relative;
+}
+
+.prd-stv-calendar-day:not(.past):not(.other-month):hover {
+  background: rgba(185, 160, 121, 0.2);
+}
+
+.prd-stv-calendar-day.today {
+  background: rgba(185, 160, 121, 0.15);
+  font-weight: 600;
+}
+
+.prd-stv-calendar-day.today::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  background: #b9a079;
+  border-radius: 50%;
+}
+
+.prd-stv-calendar-day.selected {
+  background: #b9a079 !important;
+  color: #000 !important;
+  font-weight: 600;
+}
+
+.prd-stv-calendar-day.past {
+  color: #555;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.prd-stv-calendar-day.other-month {
+  color: #555;
+  cursor: default;
+}
+
+.prd-stv-calendar-day:not(.past):not(.other-month):active {
+  transform: scale(0.95);
 }

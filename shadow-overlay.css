@@ -233,6 +233,9 @@
   transition: opacity 0.2s ease;
   margin-left: auto;
   padding-left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .prd-stv-cmd-item:hover .prd-stv-item-controls {
@@ -259,6 +262,34 @@
 .prd-stv-menu-btn:hover {
   background: var(--menu-btn-hover-bg);
   color: var(--input-text);
+}
+
+.prd-stv-close-btn {
+  background: transparent;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  appearance: none;
+  color: #9b9b9b;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.prd-stv-close-btn:hover {
+  background: var(--menu-btn-hover-bg);
+  color: #7ed321;
+}
+
+.prd-stv-close-btn.close-tab-btn:hover {
+  color: #ff6b6b;
 }
 
 /* Folder header hover effects */

@@ -59,4 +59,45 @@
       </div>
     </div>
   </div>
+
+  <!-- Modal for adding date to item -->
+  <div id="prd-stv-date-modal" class="prd-stv-modal" style="display: none;">
+    <div class="prd-stv-modal-content prd-stv-date-modal-content">
+      <div class="prd-stv-modal-header">
+        <h3>Add Date</h3>
+        <button class="prd-stv-modal-close" id="prd-stv-date-modal-close">
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>
+      <div class="prd-stv-modal-body">
+        <p id="prd-stv-date-item-title" style="margin-bottom: 12px; color: #f5f5f5;"></p>
+        <!-- Calendar Container -->
+        <div id="prd-stv-calendar-container">
+          <div class="prd-stv-calendar-header">
+            <button class="prd-stv-calendar-nav" id="prd-stv-calendar-prev">
+              <span class="material-icons-round">chevron_left</span>
+            </button>
+            <div class="prd-stv-calendar-month-year" id="prd-stv-calendar-month-year"></div>
+            <button class="prd-stv-calendar-nav" id="prd-stv-calendar-next">
+              <span class="material-icons-round">chevron_right</span>
+            </button>
+          </div>
+          <div class="prd-stv-calendar-weekdays">
+            <div>Su</div>
+            <div>Mo</div>
+            <div>Tu</div>
+            <div>We</div>
+            <div>Th</div>
+            <div>Fr</div>
+            <div>Sa</div>
+          </div>
+          <div class="prd-stv-calendar-days" id="prd-stv-calendar-days"></div>
+        </div>
+      </div>
+      <div class="prd-stv-modal-footer">
+        <button class="prd-stv-modal-btn prd-stv-modal-btn-secondary" id="prd-stv-date-cancel">Cancel</button>
+        <button class="prd-stv-modal-btn prd-stv-modal-btn-primary" id="prd-stv-date-save" disabled>Save</button>
+      </div>
+    </div>
+  </div>
 </div>
