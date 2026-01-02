@@ -209,6 +209,8 @@ const rendererUIActions = {
       }
     }, [
       dateActionEl,
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'rename' },
+        h('span', {}, 'Rename')),
       h('div', {
         class: 'prd-stv-context-item',
         'data-action': isPinned ? 'unpin' : 'pin'
@@ -238,6 +240,8 @@ const rendererUIActions = {
         if (window.state && window.elements) {
           await window.renderer.render(window.state, window.elements);
         }
+      } else if (action === 'rename') {
+        rendererUIActions.startTabRename(tab, itemElement);
       } else if (action === 'pin') {
         try {
           const tabData = {
@@ -340,13 +344,14 @@ const rendererUIActions = {
   },
 
   // Rename operations
-  startRename: (bookmark, itemElement) => {
+  startRename: async (bookmark, itemElement) => {
     const titleElement = itemElement.querySelector('.prd-stv-title');
-    const currentTitle = bookmark.title;
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = currentTitle;
+    // Get custom title or fall back to bookmark title
+    const customTitle = await window.renameHelper.getCustomTitle(bookmark.url);
+    const currentTitle = customTitle || bookmark.title;
+
+    const input = window.renameHelper.createRenameInput(currentTitle);
     input.className = 'prd-stv-rename-input';
     input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:15px;font-size:14px;outline:none;width:100%;';
 
@@ -370,6 +375,12 @@ const rendererUIActions = {
           }
 
           bookmark.title = newTitle;
+
+          // Save custom title to storage (works for both dated and non-dated items)
+          if (bookmark.url) {
+            await window.renameHelper.saveCustomTitle(bookmark.url, newTitle);
+          }
+
           window.utils.showToast('Bookmark renamed');
         } catch (error) {
           console.error('Failed to rename bookmark:', error);
@@ -380,29 +391,21 @@ const rendererUIActions = {
       titleElement.innerHTML = window.utils.highlightMatches(bookmark.title || bookmark.url, window.state?.query || '');
     };
 
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        finishRename(true);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        finishRename(false);
-      }
-    });
-
-    input.addEventListener('blur', () => finishRename(true));
+    window.renameHelper.setupKeyboardHandlers(input, finishRename);
   },
 
-  startFolderRename: (folder) => {
+  startFolderRename: async (folder) => {
     const folderHeader = document.querySelector(`.bm-folder-header[data-id="${folder.id}"]`);
     if (!folderHeader) return;
 
     const titleElement = folderHeader.querySelector('span:last-child');
-    const currentTitle = folder.title;
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = currentTitle;
+    // Get custom title or fall back to folder title (use synthetic URL for folders)
+    const folderUrl = `folder://bookmark/${folder.id}`;
+    const customTitle = await window.renameHelper.getCustomTitle(folderUrl);
+    const currentTitle = customTitle || folder.title;
+
+    const input = window.renameHelper.createRenameInput(currentTitle);
     input.className = 'prd-stv-rename-input';
     input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:15px;font-size:14px;outline:none;width:100%;';
 
@@ -426,6 +429,10 @@ const rendererUIActions = {
           }
 
           folder.title = newTitle;
+
+          // Save custom title to storage (works for both dated and non-dated folders)
+          await window.renameHelper.saveCustomTitle(folderUrl, newTitle);
+
           window.utils.showToast('Folder renamed');
         } catch (error) {
           console.error('Failed to rename folder:', error);
@@ -436,17 +443,51 @@ const rendererUIActions = {
       titleElement.textContent = folder.title || 'Untitled folder';
     };
 
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        finishRename(true);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        finishRename(false);
-      }
-    });
+    window.renameHelper.setupKeyboardHandlers(input, finishRename);
+  },
 
-    input.addEventListener('blur', () => finishRename(true));
+  // Rename tab (saves custom title to customTitles storage)
+  startTabRename: async (tab, itemElement) => {
+    const titleElement = itemElement.querySelector('.prd-stv-title');
+
+    // Get custom title or fall back to tab title
+    const customTitle = await window.renameHelper.getCustomTitle(tab.url);
+    const currentTitle = customTitle || tab.title;
+
+    const input = window.renameHelper.createRenameInput(currentTitle);
+    input.style.cssText = 'background:#3a3a3a;border:1px solid #b9a079;color:#fff;padding:2px 4px;border-radius:15px;font-size:14px;outline:none;width:100%;';
+
+    titleElement.textContent = '';
+    titleElement.appendChild(input);
+    input.focus();
+    input.select();
+
+    const finishRename = async (save = false) => {
+      const newTitle = input.value.trim();
+      if (save && newTitle && newTitle !== currentTitle) {
+        try {
+          // Save custom title to storage (tabs don't have a Chrome API for renaming)
+          if (tab.url) {
+            await window.renameHelper.saveCustomTitle(tab.url, newTitle);
+          }
+
+          tab.customTitle = newTitle;
+          window.utils.showToast('Tab renamed');
+
+          // Re-render to show the updated title
+          if (window.state && window.elements) {
+            await window.renderer.render(window.state, window.elements);
+          }
+        } catch (error) {
+          console.error('Failed to rename tab:', error);
+          window.utils.showToast('Failed to rename tab');
+        }
+      }
+
+      titleElement.textContent = tab.customTitle || tab.title || 'Untitled';
+    };
+
+    window.renameHelper.setupKeyboardHandlers(input, finishRename);
   },
 
   // Move dialog
@@ -629,7 +670,11 @@ const rendererUIActions = {
     try {
       const response = await chrome.runtime.sendMessage({ type: 'GET_BOOKMARK_TREE' });
 
-      if (response && response.success === false) {
+      if (!response) {
+        throw new Error('No response from background script');
+      }
+
+      if (response.success === false) {
         throw new Error(response.error || 'Failed to get bookmark tree');
       }
 
@@ -638,6 +683,7 @@ const rendererUIActions = {
       filteredFolders = allFolders;
       rendererUIActions.renderFolderList(folderList, filteredFolders, updateSelection);
     } catch (error) {
+      console.error('Failed to load folders:', error);
       folderList.innerHTML = '<div style="padding:16px;text-align:center;color:#ff6666;">Failed to load folders</div>';
     }
 

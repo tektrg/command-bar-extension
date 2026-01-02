@@ -44,8 +44,9 @@ function h(tag, attrs = {}, children = []) {
       // Style object: { display: 'flex', gap: '8px' }
       Object.assign(el.style, val);
     } else if (key.startsWith('data-')) {
-      // Data attributes: data-id, data-action
-      el.dataset[key.slice(5)] = val;
+      // Data attributes: data-id, data-action, data-folder-id -> folderId
+      const dataKey = key.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+      el.dataset[dataKey] = val;
     } else {
       el.setAttribute(key, val);
     }

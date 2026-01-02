@@ -6,6 +6,7 @@ const cssInjectedTabs = new Set();
 importScripts('js/pinnedTabs.js');
 importScripts('js/autoPinSync.js');
 importScripts('js/datedLinks.js');
+importScripts('js/customTitles.js');
 
 // Function to update the badge based on items due today
 async function updateDueTodayBadge() {
@@ -222,14 +223,35 @@ async function getBookmarkPath(node) {
 
 
 async function search(query) {
-  const [tabs, bookmarkTree, historyItems] = await Promise.all([
+  const [tabs, bookmarkTree, historyItems, customTitlesData] = await Promise.all([
     chrome.tabs.query({}),
     chrome.bookmarks.search({ query }),
-    chrome.history.search({ text: query, maxResults: 20 })
+    chrome.history.search({ text: query, maxResults: 20 }),
+    self.customTitlesModule ? self.customTitlesModule.load() : {}
   ]);
 
-  const tabMatches = tabs.filter(t => (t.title && t.title.toLowerCase().includes(query)) || (t.url && t.url.toLowerCase().includes(query)));
-  
+  // Helper function to get custom title for an item (from customTitles storage only)
+  const getCustomTitle = (url) => {
+    if (!url || !customTitlesData || Object.keys(customTitlesData).length === 0) return null;
+    const normalized = self.customTitlesModule ? self.customTitlesModule.normalizeUrl(url) : url;
+    return customTitlesData[normalized] || null;
+  };
+
+  // Helper function to check if item matches query (original title OR custom title)
+  const matchesQuery = (originalTitle, url, query) => {
+    const lowerQuery = query.toLowerCase();
+    // Check original title
+    if (originalTitle && originalTitle.toLowerCase().includes(lowerQuery)) return true;
+    // Check custom title
+    const customTitle = getCustomTitle(url);
+    if (customTitle && customTitle.toLowerCase().includes(lowerQuery)) return true;
+    // Check URL
+    if (url && url.toLowerCase().includes(lowerQuery)) return true;
+    return false;
+  };
+
+  const tabMatches = tabs.filter(t => matchesQuery(t.title, t.url, query));
+
   // Sort tabs by windowId first, then by index to maintain proper order
   tabMatches.sort((a, b) => {
     if (a.windowId !== b.windowId) {
@@ -237,11 +259,12 @@ async function search(query) {
     }
     return a.index - b.index;
   });
-  
+
   const tabResults = tabMatches.map(t => ({
     id: t.id,
     title: t.title,
     url: t.url,
+    customTitle: getCustomTitle(t.url),
     source: "tab",
     icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '',
     type: 'tab',
@@ -253,13 +276,14 @@ async function search(query) {
   // Resolve bookmark folder paths concurrently
   const bookmarkResults = await Promise.all(bookmarkTree.map(async (b) => {
     const folderPath = await getBookmarkPath(b);
-    return { id: b.id, title: b.title, url: b.url, source: "bookmark", icon: '', folder: folderPath, type: 'bookmark', dateAdded: b.dateAdded || 0 };
+    return { id: b.id, title: b.title, url: b.url, customTitle: getCustomTitle(b.url), source: "bookmark", icon: '', folder: folderPath, type: 'bookmark', dateAdded: b.dateAdded || 0 };
   }));
 
   const historyResults = historyItems.map(h => ({
     id: h.id,
     title: h.title,
     url: h.url,
+    customTitle: getCustomTitle(h.url),
     source: "history",
     icon: '',
     lastVisitTime: h.lastVisitTime || 0,
@@ -269,12 +293,24 @@ async function search(query) {
   return [...tabResults, ...bookmarkResults, ...historyResults];
 }
 
-function buildRecentFromTabs(tabs, activeId) {
+async function buildRecentFromTabs(tabs, activeId) {
   const filtered = activeId ? tabs.filter((t) => t.id !== activeId) : tabs;
+
+  // Load custom titles from storage
+  const customTitlesData = self.customTitlesModule ? await self.customTitlesModule.load() : {};
+
+  // Helper function to get custom title for an item (from customTitles storage only)
+  const getCustomTitle = (url) => {
+    if (!url || !customTitlesData || Object.keys(customTitlesData).length === 0) return null;
+    const normalized = self.customTitlesModule ? self.customTitlesModule.normalizeUrl(url) : url;
+    return customTitlesData[normalized] || null;
+  };
+
   return filtered.map((t) => ({
     id: t.id,
     title: t.title,
     url: t.url,
+    customTitle: getCustomTitle(t.url),
     source: "tab",
     icon: t.favIconUrl && !t.favIconUrl.startsWith('chrome://') ? t.favIconUrl : '',
     type: 'tab',
@@ -327,9 +363,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const activeId = sender.tab?.id;
         const tabs = await chrome.tabs.query({});
         const pinnedTabsWithStatus = await getPinnedTabsWithStatusFromTabs(tabs);
+        const recent = await buildRecentFromTabs(tabs, activeId);
         sendResponse({
           success: true,
-          recent: buildRecentFromTabs(tabs, activeId),
+          recent: recent,
           tabCount: tabs.length,
           pinnedTabs: pinnedTabsWithStatus
         });
@@ -340,15 +377,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     })();
     return true; // async
   } else if (msg.type === "RECENT") {
-    chrome.tabs.query({}, (allTabs) => {
-      const activeId = sender.tab?.id;
-      const filtered = activeId ? allTabs.filter(t => t.id !== activeId) : allTabs;
-      
-      // Don't pre-sort here - let content script sort by lastAccessed
-      
-      const recent = buildRecentFromTabs(filtered, null);
-      sendResponse(recent);
-    });
+    (async () => {
+      try {
+        const allTabs = await chrome.tabs.query({});
+        const activeId = sender.tab?.id;
+        const filtered = activeId ? allTabs.filter(t => t.id !== activeId) : allTabs;
+
+        // Don't pre-sort here - let content script sort by lastAccessed
+
+        const recent = await buildRecentFromTabs(filtered, null);
+        sendResponse(recent);
+      } catch (error) {
+        console.error('Failed to get recent tabs:', error);
+        sendResponse([]);
+      }
+    })();
     return true;
   } else if (msg.type === "DELETE") {
     const { item } = msg;
