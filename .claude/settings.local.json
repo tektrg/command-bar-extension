@@ -16,7 +16,8 @@
       "Read(/Users/trungluong/**)",
       "Bash(find:*)",
       "Bash(kill:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }
