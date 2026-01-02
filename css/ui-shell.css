@@ -1128,3 +1128,20 @@ img.prd-stv-favicon {
 .prd-stv-calendar-day:not(.past):not(.other-month):active {
   transform: scale(0.95);
 }
+
+/* Scroll highlight effect for folders */
+.bm-folder.scroll-highlight > .bm-folder-header {
+  background: rgba(185, 160, 121, 0.25);
+  animation: scrollHighlightPulse 1.5s ease-out;
+}
+
+@keyframes scrollHighlightPulse {
+  0% {
+    background: rgba(185, 160, 121, 0.4);
+    box-shadow: 0 0 0 2px rgba(185, 160, 121, 0.5);
+  }
+  100% {
+    background: rgba(185, 160, 121, 0.1);
+    box-shadow: 0 0 0 0 rgba(185, 160, 121, 0);
+  }
+}

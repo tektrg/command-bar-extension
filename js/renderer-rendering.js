@@ -257,8 +257,27 @@ const rendererRendering = {
         if (isFolder) {
           const folderId = item.itemId;
           if (folderId) {
-            window.folderState.toggleExpanded(folderId, state, window.storage);
+            // Expand the folder and scroll to it
+            await window.folderState.ensureExpanded(folderId, state, window.storage);
             await window.renderer.render(state, window.elements);
+            // Find the folder element and scroll to it within the list container
+            const folderEl = document.querySelector(`.bm-folder[data-id="${folderId}"]`);
+            const listContainer = document.querySelector('.prd-stv-list');
+            if (folderEl && listContainer) {
+              // Calculate scroll position within the container
+              const containerRect = listContainer.getBoundingClientRect();
+              const folderRect = folderEl.getBoundingClientRect();
+              const scrollOffset = folderRect.top - containerRect.top + listContainer.scrollTop;
+              // Scroll to position with some padding from the top
+              const paddingTop = 16;
+              listContainer.scrollTo({
+                top: Math.max(0, scrollOffset - paddingTop),
+                behavior: 'smooth'
+              });
+              // Brief highlight effect
+              folderEl.classList.add('scroll-highlight');
+              setTimeout(() => folderEl.classList.remove('scroll-highlight'), 1500);
+            }
           }
         } else {
           window.openUrl(item.url, e, item.itemId);
