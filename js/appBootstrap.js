@@ -228,8 +228,6 @@
       // Remove bookmark-tab relationship before closing
       await removeBookmarkTabRelationship(tabId);
       await chrome.tabs.remove(tabId);
-      await reloadTabs();
-      await window.renderer.render(state, elements);
       window.utils.showToast('Tab closed');
     } catch {
       window.utils.showToast('Failed to close tab');
@@ -242,8 +240,6 @@
       if (tabId) {
         await removeBookmarkTabRelationship(tabId);
         await chrome.tabs.remove(tabId);
-        await reloadTabs();
-        await window.renderer.render(state, elements);
         window.utils.showToast('Tab closed');
       }
     } catch {
@@ -269,8 +265,6 @@
   async function deleteBookmark(bookmarkId) {
     try {
       await chrome.bookmarks.remove(bookmarkId);
-      await reloadBookmarks();
-      await window.renderer.render(state, elements);
       window.utils.showToast('Bookmark deleted');
     } catch {
       window.utils.showToast('Failed to delete bookmark');
