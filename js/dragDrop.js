@@ -139,6 +139,26 @@ const dragDrop = {
         await window.bookmarks.createIfNotDuplicate(folderId, payload.title || payload.url, payload.url, payload.id);
       }
       window.utils.showToast('Bookmarked tab');
+    } else if (payload.type === 'dated') {
+      if (!payload.url) return;
+      // If the dated item has an itemId (is a bookmark/folder), move it
+      if (payload.itemId && payload.itemType === 'folder') {
+        if (window.bookmarks && window.bookmarks.safeMove) {
+          await window.bookmarks.safeMove(payload.itemId, folderId);
+        }
+        window.utils.showToast('Dated folder moved');
+      } else if (payload.itemId) {
+        if (window.bookmarks && window.bookmarks.safeMove) {
+          await window.bookmarks.safeMove(payload.itemId, folderId);
+        }
+        window.utils.showToast('Dated bookmark moved');
+      } else {
+        // Create a new bookmark from the dated item
+        if (window.bookmarks && window.bookmarks.createIfNotDuplicate) {
+          await window.bookmarks.createIfNotDuplicate(folderId, payload.title || payload.url, payload.url);
+        }
+        window.utils.showToast('Dated item bookmarked');
+      }
     }
   },
 
