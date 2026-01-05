@@ -1,12 +1,72 @@
 // Core rendering module for DOM generation and updates
 
+// Render lock to prevent race conditions from concurrent render calls
+let isRendering = false;
+let pendingRender = null;
+
 const rendererRendering = {
   // Main render function
   render: async (state, elements) => {
-    await rendererRendering.renderCombined(state, elements);
-    if (window.dragDrop && typeof window.dragDrop.refreshSortables === 'function') {
-      window.dragDrop.refreshSortables(state, elements);
+    // If already rendering, queue this render request and exit
+    if (isRendering) {
+      pendingRender = { state, elements };
+      return;
     }
+
+    isRendering = true;
+
+    try {
+      // Preserve scroll position before re-rendering (elements.combined is the scrollable container)
+      const scrollTop = elements.combined ? elements.combined.scrollTop : 0;
+
+      await rendererRendering.renderCombined(state, elements);
+      if (window.dragDrop && typeof window.dragDrop.refreshSortables === 'function') {
+        window.dragDrop.refreshSortables(state, elements);
+      }
+
+      // Restore scroll position after re-rendering
+      if (elements.combined && scrollTop > 0) {
+        elements.combined.scrollTop = scrollTop;
+      }
+    } finally {
+      isRendering = false;
+
+      // If there's a pending render, execute it now
+      if (pendingRender) {
+        const pending = pendingRender;
+        pendingRender = null;
+        await rendererRendering.render(pending.state, pending.elements);
+      }
+    }
+  },
+
+  // Animate element removal with fade-out (performance optimized)
+  animateRemoval: (element) => {
+    if (!element || !element.parentNode) return;
+
+    // Add class on next frame to ensure CSS transition triggers
+    requestAnimationFrame(() => {
+      element.classList.add('removing');
+    });
+
+    // Listen for actual transition completion
+    const handleTransitionEnd = (e) => {
+      if (e.propertyName !== 'opacity') return; // Only trigger once
+      element.removeEventListener('transitionend', handleTransitionEnd);
+      if (element.parentNode) {
+        element.remove();
+      }
+    };
+
+    element.addEventListener('transitionend', handleTransitionEnd, { once: true });
+
+    // Fallback timeout only if transition fails
+    setTimeout(() => {
+      element.removeEventListener('transitionend', handleTransitionEnd);
+      if (element.parentNode) {
+        element.remove();
+      }
+    }, 300);
   },
 
   // Selective DOM update functions
@@ -17,8 +77,8 @@ const rendererRendering = {
       const newElement = rendererRendering.renderBookmarkItem(bookmark, state);
       existingElement.replaceWith(newElement);
     } else if (!bookmark && existingElement) {
-      // Remove deleted item
-      existingElement.remove();
+      // Remove deleted item with animation
+      rendererRendering.animateRemoval(existingElement);
     } else if (bookmark && !existingElement) {
       // Add new item (need to find correct insertion point)
       rendererRendering.insertBookmarkAtCorrectPosition(bookmark, state, elements);
@@ -31,7 +91,7 @@ const rendererRendering = {
       const newElement = rendererRendering.renderTabItem(tab, state);
       existingElement.replaceWith(newElement);
     } else if (!tab && existingElement) {
-      existingElement.remove();
+      rendererRendering.animateRemoval(existingElement);
     } else if (tab && !existingElement) {
       rendererRendering.insertTabAtCorrectPosition(tab, state, elements);
     }
@@ -203,6 +263,7 @@ const rendererRendering = {
       'data-id': item.id,
       'data-url': item.url,
       'data-itemType': 'dated',
+      draggable: 'true',
       title: `${item.title}\n${isFolder ? 'Folder' : item.url}\nDate: ${item.date}`
     }, [
       h('div', { style: { display: 'flex', flex: '1', alignItems: 'center', minWidth: '0' } }, [
@@ -284,6 +345,9 @@ const rendererRendering = {
         }
       }
     });
+
+    // Add drag and drop handlers
+    rendererRendering.addDatedItemDragHandlers(div, item, state);
 
     return div;
   },
@@ -795,6 +859,31 @@ const rendererRendering = {
       state.dragState.isDragging = true;
       state.dragState.draggedItem = payload;
       state.dragState.draggedType = 'bookmark';
+    });
+
+    div.addEventListener('dragend', () => {
+      state.dragState.isDragging = false;
+      state.dragState.draggedItem = null;
+      state.dragState.draggedType = null;
+    });
+  },
+
+  addDatedItemDragHandlers: (div, item, state) => {
+    div.addEventListener('dragstart', (e) => {
+      const payload = {
+        type: 'dated',
+        id: item.id,
+        url: item.url,
+        title: item.title,
+        itemType: item.itemType,
+        itemId: item.itemId,
+        date: item.date
+      };
+      e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+      e.dataTransfer.effectAllowed = 'copy';
+      state.dragState.isDragging = true;
+      state.dragState.draggedItem = payload;
+      state.dragState.draggedType = 'dated';
     });
 
     div.addEventListener('dragend', () => {
