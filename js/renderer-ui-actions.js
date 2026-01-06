@@ -381,6 +381,21 @@ const rendererUIActions = {
             await window.renameHelper.saveCustomTitle(bookmark.url, newTitle);
           }
 
+          // If this is a dated item, update the title in datedLinks storage
+          if (bookmark._isDated && bookmark.url && window.datedLinksModule) {
+            const datedItem = await window.datedLinksModule.getByUrl(bookmark.url);
+            if (datedItem) {
+              datedItem.title = newTitle;
+              const allDatedLinks = await window.datedLinksModule.load();
+              const updatedLinks = allDatedLinks.map(item =>
+                window.datedLinksModule.normalizeUrl(item.url) === window.datedLinksModule.normalizeUrl(bookmark.url)
+                  ? { ...item, title: newTitle }
+                  : item
+              );
+              await window.datedLinksModule.save(updatedLinks);
+            }
+          }
+
           window.utils.showToast('Bookmark renamed');
         } catch (error) {
           console.error('Failed to rename bookmark:', error);
@@ -432,6 +447,21 @@ const rendererUIActions = {
 
           // Save custom title to storage (works for both dated and non-dated folders)
           await window.renameHelper.saveCustomTitle(folderUrl, newTitle);
+
+          // If this is a dated folder, update the title in datedLinks storage
+          if (folder._isDated && window.datedLinksModule) {
+            const datedItem = await window.datedLinksModule.getByUrl(folderUrl);
+            if (datedItem) {
+              datedItem.title = newTitle;
+              const allDatedLinks = await window.datedLinksModule.load();
+              const updatedLinks = allDatedLinks.map(item =>
+                window.datedLinksModule.normalizeUrl(item.url) === window.datedLinksModule.normalizeUrl(folderUrl)
+                  ? { ...item, title: newTitle }
+                  : item
+              );
+              await window.datedLinksModule.save(updatedLinks);
+            }
+          }
 
           window.utils.showToast('Folder renamed');
         } catch (error) {
