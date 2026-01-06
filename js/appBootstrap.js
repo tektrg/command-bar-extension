@@ -348,11 +348,11 @@
       if (matchingTab) {
         // Switch to the existing tab
         await activateTab(matchingTab);
-        
+
         // If this was a bookmark click, create the relationship
         if (bookmarkId) {
           await createBookmarkTabRelationship(bookmarkId, matchingTab.id);
-          await window.renderer.render(state, elements);
+          // Don't re-render here - Chrome tab listeners will update the UI
         }
         return;
       }
@@ -374,8 +374,7 @@
       // Create bookmark-tab relationship if this was opened from a bookmark
       if (bookmarkId && targetTab && targetTab.id) {
         await createBookmarkTabRelationship(bookmarkId, targetTab.id);
-        // Re-render to show the updated relationship
-        await window.renderer.render(state, elements);
+        // Don't re-render here - Chrome tab listeners will update the UI when the new tab is created
       }
 
       maybeCloseSurface();
