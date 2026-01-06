@@ -538,6 +538,33 @@ img.prd-stv-favicon {
   border-bottom: 1px solid #3a3a3a;
 }
 
+/* Submenu styling */
+.prd-stv-has-submenu {
+  justify-content: space-between;
+  position: relative;
+}
+
+.prd-stv-submenu-arrow {
+  color: #9b9b9b;
+  font-size: 16px;
+  margin-right: 12px;
+}
+
+.prd-stv-submenu {
+  animation: submenuSlideIn 0.15s ease-out;
+}
+
+@keyframes submenuSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* Folder item selection styling */
 .prd-stv-folder-item:hover {
   background: #353535;
