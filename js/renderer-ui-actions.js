@@ -1,6 +1,37 @@
 // UI Actions module for context menus, modals, and rename operations
 
 const rendererUIActions = {
+  // Quick date calculation helpers
+  getQuickDates() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Tomorrow
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Next week (same weekday)
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    // Someday (random date within next 30 days)
+    const someday = new Date(today);
+    const randomDays = Math.floor(Math.random() * 30) + 1;
+    someday.setDate(someday.getDate() + randomDays);
+
+    const formatDate = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    return {
+      tomorrow: formatDate(tomorrow),
+      nextWeek: formatDate(nextWeek),
+      someday: formatDate(someday)
+    };
+  },
   // Context menu management
   showContextMenu: async (event, bookmark, itemElement) => {
     rendererUIActions.closeContextMenu();
@@ -15,13 +46,31 @@ const rendererUIActions = {
       console.warn('Failed to check dated status:', error);
     }
 
-    const dateActionEl = hasDate ?
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
-        h('span', {}, 'Remove date')) :
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date' },
-        h('span', {}, 'Add date'));
-
     const buttonRect = event.target.getBoundingClientRect();
+
+    // Build date submenu items
+    const dateSubmenuItems = hasDate ? [
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
+        h('span', {}, 'Remove date'))
+    ] : [
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-tomorrow' },
+        h('span', {}, 'Tomorrow')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-next-week' },
+        h('span', {}, 'Next week')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-someday' },
+        h('span', {}, 'Someday')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-custom' },
+        h('span', {}, 'Custom date...'))
+    ];
+
+    const dateActionEl = h('div', {
+      class: 'prd-stv-context-item prd-stv-has-submenu',
+      'data-action': 'date-menu'
+    }, [
+      h('span', { class: 'prd-stv-submenu-arrow' }, '‹'),
+      h('span', {}, hasDate ? 'Change date' : 'Add date')
+    ]);
+
     const contextMenu = h('div', {
       class: 'prd-stv-context-menu',
       style: {
@@ -40,28 +89,87 @@ const rendererUIActions = {
 
     document.body.appendChild(contextMenu);
 
-    contextMenu.addEventListener('click', async (e) => {
-      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-      if (action === 'add-date') {
-        const itemData = {
-          url: bookmark.url,
-          title: bookmark.title || 'Untitled',
-          favicon: bookmark.favicon || '',
-          itemType: 'bookmark',
-          itemId: bookmark.id
-        };
+    // Handle submenu
+    let submenu = null;
+
+    const handleDateAction = async (action) => {
+      const itemData = {
+        url: bookmark.url,
+        title: bookmark.title || 'Untitled',
+        favicon: bookmark.favicon || '',
+        itemType: 'bookmark',
+        itemId: bookmark.id
+      };
+
+      if (action === 'add-date-tomorrow') {
+        const dates = rendererUIActions.getQuickDates();
+        await window.datedLinksModule.addDate(itemData, dates.tomorrow);
+        window.utils.showToast('Date set to tomorrow');
+      } else if (action === 'add-date-next-week') {
+        const dates = rendererUIActions.getQuickDates();
+        await window.datedLinksModule.addDate(itemData, dates.nextWeek);
+        window.utils.showToast('Date set to next week');
+      } else if (action === 'add-date-someday') {
+        const dates = rendererUIActions.getQuickDates();
+        await window.datedLinksModule.addDate(itemData, dates.someday);
+        window.utils.showToast('Date set to someday');
+      } else if (action === 'add-date-custom') {
         window.dateModal.show(itemData);
+        return; // Don't close menu yet, modal will handle it
       } else if (action === 'remove-date') {
         await window.datedLinksModule.removeDate(bookmark.url);
         window.utils.showToast('Date removed');
-        if (window.state && window.elements) {
-          await window.renderer.render(window.state, window.elements);
+      }
+
+      if (window.state && window.elements) {
+        await window.renderer.render(window.state, window.elements);
+      }
+    };
+
+    dateActionEl.addEventListener('mouseenter', () => {
+      if (submenu) submenu.remove();
+
+      const itemRect = dateActionEl.getBoundingClientRect();
+      submenu = h('div', {
+        class: 'prd-stv-context-menu prd-stv-submenu',
+        style: {
+          position: 'fixed',
+          right: `${window.innerWidth - itemRect.left + 4}px`,
+          top: `${itemRect.top}px`,
+          zIndex: '10001'
         }
+      }, dateSubmenuItems);
+
+      document.body.appendChild(submenu);
+
+      // Attach click handler immediately after creating submenu
+      submenu.addEventListener('click', async (e) => {
+        const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+        if (action) {
+          await handleDateAction(action);
+          rendererUIActions.closeContextMenu();
+        }
+      });
+    });
+
+    contextMenu.addEventListener('mouseleave', (e) => {
+      if (submenu && !submenu.contains(e.relatedTarget)) {
+        submenu?.remove();
+        submenu = null;
+      }
+    });
+
+    contextMenu.addEventListener('click', async (e) => {
+      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+
+      if (action && action.startsWith('add-date') || action === 'remove-date') {
+        await handleDateAction(action);
       } else if (action === 'rename') {
         rendererUIActions.startRename(bookmark, itemElement);
       } else if (action === 'move') {
         rendererUIActions.showMoveDialog(bookmark);
       }
+
       rendererUIActions.closeContextMenu();
     });
 
@@ -71,10 +179,8 @@ const rendererUIActions = {
   },
 
   closeContextMenu: () => {
-    const existingMenu = document.querySelector('.prd-stv-context-menu');
-    if (existingMenu) {
-      existingMenu.remove();
-    }
+    const existingMenus = document.querySelectorAll('.prd-stv-context-menu');
+    existingMenus.forEach(menu => menu.remove());
   },
 
   showFolderContextMenu: async (event, folder) => {
@@ -91,18 +197,36 @@ const rendererUIActions = {
       console.warn('Failed to check dated status:', error);
     }
 
-    const dateActionEl = hasDate ?
+    const buttonRect = event.target.getBoundingClientRect();
+
+    // Build date submenu items
+    const dateSubmenuItems = hasDate ? [
       h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
-        h('span', {}, 'Remove date')) :
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date' },
-        h('span', {}, 'Add date'));
+        h('span', {}, 'Remove date'))
+    ] : [
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-tomorrow' },
+        h('span', {}, 'Tomorrow')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-next-week' },
+        h('span', {}, 'Next week')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-someday' },
+        h('span', {}, 'Someday')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-custom' },
+        h('span', {}, 'Custom date...'))
+    ];
+
+    const dateActionEl = h('div', {
+      class: 'prd-stv-context-item prd-stv-has-submenu',
+      'data-action': 'date-menu'
+    }, [
+      h('span', { class: 'prd-stv-submenu-arrow' }, '‹'),
+      h('span', {}, hasDate ? 'Change date' : 'Add date')
+    ]);
 
     const openCount = window.getOpenBookmarkCountInFolder(folder.id, window.state);
     const closeTabsEl = openCount > 0 ?
       h('div', { class: 'prd-stv-context-item', 'data-action': 'close-tabs' },
         h('span', {}, 'Close tabs')) : null;
 
-    const buttonRect = event.target.getBoundingClientRect();
     const contextMenu = h('div', {
       class: 'prd-stv-context-menu',
       style: {
@@ -131,23 +255,81 @@ const rendererUIActions = {
 
     document.body.appendChild(contextMenu);
 
-    contextMenu.addEventListener('click', async (e) => {
-      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-      if (action === 'add-date') {
-        const itemData = {
-          url: folderUrl,
-          title: folder.title || 'Untitled Folder',
-          favicon: '',
-          itemType: 'folder',
-          itemId: folder.id
-        };
+    // Handle submenu
+    let submenu = null;
+
+    const handleDateAction = async (action) => {
+      const itemData = {
+        url: folderUrl,
+        title: folder.title || 'Untitled Folder',
+        favicon: '',
+        itemType: 'folder',
+        itemId: folder.id
+      };
+
+      if (action === 'add-date-tomorrow') {
+        const dates = rendererUIActions.getQuickDates();
+        await window.datedLinksModule.addDate(itemData, dates.tomorrow);
+        window.utils.showToast('Date set to tomorrow');
+      } else if (action === 'add-date-next-week') {
+        const dates = rendererUIActions.getQuickDates();
+        await window.datedLinksModule.addDate(itemData, dates.nextWeek);
+        window.utils.showToast('Date set to next week');
+      } else if (action === 'add-date-someday') {
+        const dates = rendererUIActions.getQuickDates();
+        await window.datedLinksModule.addDate(itemData, dates.someday);
+        window.utils.showToast('Date set to someday');
+      } else if (action === 'add-date-custom') {
         window.dateModal.show(itemData);
+        return; // Don't close menu yet, modal will handle it
       } else if (action === 'remove-date') {
         await window.datedLinksModule.removeDate(folderUrl);
         window.utils.showToast('Date removed');
-        if (window.state && window.elements) {
-          await window.renderer.render(window.state, window.elements);
+      }
+
+      if (window.state && window.elements) {
+        await window.renderer.render(window.state, window.elements);
+      }
+    };
+
+    dateActionEl.addEventListener('mouseenter', () => {
+      if (submenu) submenu.remove();
+
+      const itemRect = dateActionEl.getBoundingClientRect();
+      submenu = h('div', {
+        class: 'prd-stv-context-menu prd-stv-submenu',
+        style: {
+          position: 'fixed',
+          right: `${window.innerWidth - itemRect.left + 4}px`,
+          top: `${itemRect.top}px`,
+          zIndex: '10001'
         }
+      }, dateSubmenuItems);
+
+      document.body.appendChild(submenu);
+
+      // Attach click handler immediately after creating submenu
+      submenu.addEventListener('click', async (e) => {
+        const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+        if (action) {
+          await handleDateAction(action);
+          rendererUIActions.closeContextMenu();
+        }
+      });
+    });
+
+    contextMenu.addEventListener('mouseleave', (e) => {
+      if (submenu && !submenu.contains(e.relatedTarget)) {
+        submenu?.remove();
+        submenu = null;
+      }
+    });
+
+    contextMenu.addEventListener('click', async (e) => {
+      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+
+      if (action && action.startsWith('add-date') || action === 'remove-date') {
+        await handleDateAction(action);
       } else if (action === 'save-tab-here') {
         window.saveActiveTabToFolder(folder.id);
       } else if (action === 'close-tabs') {
@@ -161,6 +343,7 @@ const rendererUIActions = {
       } else if (action === 'delete-folder') {
         rendererUIActions.showDeleteFolderModal(folder);
       }
+
       rendererUIActions.closeContextMenu();
     });
 
@@ -192,13 +375,31 @@ const rendererUIActions = {
       console.warn('Failed to check dated status:', error);
     }
 
-    const dateActionEl = hasDate ?
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
-        h('span', {}, 'Remove date')) :
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date' },
-        h('span', {}, 'Add date'));
-
     const buttonRect = event.target.getBoundingClientRect();
+
+    // Build date submenu items
+    const dateSubmenuItems = hasDate ? [
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
+        h('span', {}, 'Remove date'))
+    ] : [
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-tomorrow' },
+        h('span', {}, 'Tomorrow')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-next-week' },
+        h('span', {}, 'Next week')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-someday' },
+        h('span', {}, 'Someday')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-custom' },
+        h('span', {}, 'Custom date...'))
+    ];
+
+    const dateActionEl = h('div', {
+      class: 'prd-stv-context-item prd-stv-has-submenu',
+      'data-action': 'date-menu'
+    }, [
+      h('span', { class: 'prd-stv-submenu-arrow' }, '‹'),
+      h('span', {}, hasDate ? 'Change date' : 'Add date')
+    ]);
+
     const contextMenu = h('div', {
       class: 'prd-stv-context-menu',
       style: {
@@ -223,23 +424,81 @@ const rendererUIActions = {
 
     document.body.appendChild(contextMenu);
 
-    contextMenu.addEventListener('click', async (e) => {
-      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-      if (action === 'add-date') {
-        const itemData = {
-          url: tab.url,
-          title: tab.title || 'Untitled',
-          favicon: tab.favIconUrl || '',
-          itemType: 'tab',
-          itemId: tab.id
-        };
+    // Handle submenu
+    let submenu = null;
+
+    const handleDateAction = async (action) => {
+      const itemData = {
+        url: tab.url,
+        title: tab.title || 'Untitled',
+        favicon: tab.favIconUrl || '',
+        itemType: 'tab',
+        itemId: tab.id
+      };
+
+      if (action === 'add-date-tomorrow') {
+        const dates = rendererUIActions.getQuickDates();
+        await window.datedLinksModule.addDate(itemData, dates.tomorrow);
+        window.utils.showToast('Date set to tomorrow');
+      } else if (action === 'add-date-next-week') {
+        const dates = rendererUIActions.getQuickDates();
+        await window.datedLinksModule.addDate(itemData, dates.nextWeek);
+        window.utils.showToast('Date set to next week');
+      } else if (action === 'add-date-someday') {
+        const dates = rendererUIActions.getQuickDates();
+        await window.datedLinksModule.addDate(itemData, dates.someday);
+        window.utils.showToast('Date set to someday');
+      } else if (action === 'add-date-custom') {
         window.dateModal.show(itemData);
+        return; // Don't close menu yet, modal will handle it
       } else if (action === 'remove-date') {
         await window.datedLinksModule.removeDate(tab.url);
         window.utils.showToast('Date removed');
-        if (window.state && window.elements) {
-          await window.renderer.render(window.state, window.elements);
+      }
+
+      if (window.state && window.elements) {
+        await window.renderer.render(window.state, window.elements);
+      }
+    };
+
+    dateActionEl.addEventListener('mouseenter', () => {
+      if (submenu) submenu.remove();
+
+      const itemRect = dateActionEl.getBoundingClientRect();
+      submenu = h('div', {
+        class: 'prd-stv-context-menu prd-stv-submenu',
+        style: {
+          position: 'fixed',
+          right: `${window.innerWidth - itemRect.left + 4}px`,
+          top: `${itemRect.top}px`,
+          zIndex: '10001'
         }
+      }, dateSubmenuItems);
+
+      document.body.appendChild(submenu);
+
+      // Attach click handler immediately after creating submenu
+      submenu.addEventListener('click', async (e) => {
+        const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+        if (action) {
+          await handleDateAction(action);
+          rendererUIActions.closeContextMenu();
+        }
+      });
+    });
+
+    contextMenu.addEventListener('mouseleave', (e) => {
+      if (submenu && !submenu.contains(e.relatedTarget)) {
+        submenu?.remove();
+        submenu = null;
+      }
+    });
+
+    contextMenu.addEventListener('click', async (e) => {
+      const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
+
+      if (action && action.startsWith('add-date') || action === 'remove-date') {
+        await handleDateAction(action);
       } else if (action === 'rename') {
         rendererUIActions.startTabRename(tab, itemElement);
       } else if (action === 'pin') {
@@ -297,6 +556,7 @@ const rendererUIActions = {
       } else if (action === 'duplicate') {
         window.duplicateTab(tab);
       }
+
       rendererUIActions.closeContextMenu();
     });
 
