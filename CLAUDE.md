@@ -82,6 +82,31 @@ Key features of `h()`:
 - **Conditional children**: `showBtn && h('button', {}, 'Click')`
 - **Auto text escaping**: Strings passed as children are safely escaped
 
+**Performance: Avoid Full Re-renders**: When implementing interactive UI elements (collapsible sections, toggles, etc.), avoid calling `window.renderer.render()` unnecessarily as it clears and rebuilds the entire DOM (`elements.combined.innerHTML = ''`), causing visible flicker and performance overhead.
+
+```javascript
+// ❌ Bad: Causes full DOM re-render and flicker
+onclick: () => {
+  state.collapsed = !state.collapsed;
+  window.renderer.render(state, elements);  // Clears entire list!
+}
+
+// ✅ Good: Direct DOM manipulation for simple toggles
+onclick: (e) => {
+  state.collapsed = !state.collapsed;
+  const container = document.getElementById('my-container');
+  container.classList.toggle('collapsed');  // CSS-only, no re-render
+  // Update only affected elements directly
+}
+```
+
+**When to use each approach**:
+- **Full re-render** (`window.renderer.render()`): Data changes that affect multiple sections (search queries, adding/removing items, filter changes)
+- **Direct DOM updates**: Simple visibility toggles, style changes, icon rotations, or updates to a single element
+- **CSS transitions**: For smooth animations without DOM manipulation (collapsible sections, fade effects)
+
+See `renderFutureDatedItemsCollapsible()` in `js/renderer-rendering.js` for a reference implementation of CSS-based collapsible without re-render.
+
 ## Development Commands
 
 Since this is a vanilla JavaScript Chrome extension without build tools, there are no npm/build commands. Development involves:
