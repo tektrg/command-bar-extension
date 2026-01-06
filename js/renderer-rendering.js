@@ -198,6 +198,27 @@ const rendererRendering = {
 
       if (filteredItems.length === 0) return;
 
+      // Separate today/past items from future items
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const todayAndPastItems = [];
+      const futureItems = [];
+
+      filteredItems.forEach(item => {
+        const itemDate = new Date(item.date);
+        itemDate.setHours(0, 0, 0, 0);
+
+        if (itemDate.getTime() <= today.getTime()) {
+          todayAndPastItems.push(item);
+        } else {
+          futureItems.push(item);
+        }
+      });
+
+      // Only show section if there are items to display
+      if (todayAndPastItems.length === 0 && futureItems.length === 0) return;
+
       // Create header
       const header = document.createElement('div');
       header.className = 'prd-stv-window-separator';
@@ -207,14 +228,100 @@ const rendererRendering = {
       `;
       elements.combined.appendChild(header);
 
-      // Render each dated item
-      filteredItems.forEach(item => {
+      // Render today and past items
+      todayAndPastItems.forEach(item => {
         const element = rendererRendering.renderDatedItem(item, state);
         elements.combined.appendChild(element);
       });
+
+      // Render future items in collapsible section if they exist
+      if (futureItems.length > 0) {
+        rendererRendering.renderFutureDatedItemsCollapsible(futureItems, state, elements);
+      }
     } catch (error) {
       console.error('[Renderer] Failed to render dated items:', error);
     }
+  },
+
+  // Render future dated items in a collapsible section
+  renderFutureDatedItemsCollapsible: (futureItems, state, elements) => {
+    // Initialize collapsed state if not exists
+    if (typeof state.futureDatedItemsCollapsed === 'undefined') {
+      state.futureDatedItemsCollapsed = true; // Start collapsed by default
+    }
+
+    const containerId = 'future-dated-items-container';
+    const isCollapsed = state.futureDatedItemsCollapsed;
+
+    // Create collapsible header with DOM-only toggle
+    const collapsibleHeader = h('div', {
+      class: 'future-dated-items-header',
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        padding: '8px 12px',
+        cursor: 'pointer',
+        fontSize: '11px',
+        color: '#888',
+        fontWeight: '500',
+        userSelect: 'none',
+        borderRadius: '4px',
+        margin: '4px 0',
+        transition: 'background 0.2s'
+      },
+      onclick: (e) => {
+        // Toggle state
+        state.futureDatedItemsCollapsed = !state.futureDatedItemsCollapsed;
+
+        // Find container and chevron
+        const container = document.getElementById(containerId);
+        const chevron = e.currentTarget.querySelector('.future-items-chevron');
+
+        // Toggle visibility via CSS (no re-render!)
+        if (container) {
+          container.classList.toggle('collapsed');
+        }
+
+        // Rotate chevron
+        if (chevron) {
+          const isNowCollapsed = state.futureDatedItemsCollapsed;
+          chevron.style.transform = isNowCollapsed ? 'rotate(0deg)' : 'rotate(90deg)';
+        }
+      },
+      onmouseenter: (e) => {
+        e.target.style.background = 'rgba(255, 255, 255, 0.05)';
+      },
+      onmouseleave: (e) => {
+        e.target.style.background = 'transparent';
+      }
+    }, [
+      h('span', {
+        class: 'material-icons-round future-items-chevron',
+        style: {
+          fontSize: '16px',
+          marginRight: '6px',
+          transition: 'transform 0.2s',
+          transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)'
+        }
+      }, 'chevron_right'),
+      h('span', {}, `Future items (${futureItems.length})`)
+    ]);
+
+    elements.combined.appendChild(collapsibleHeader);
+
+    // Create container for future items (always rendered, visibility controlled by CSS)
+    const container = h('div', {
+      id: containerId,
+      class: isCollapsed ? 'future-dated-items-list collapsed' : 'future-dated-items-list'
+    });
+
+    // Render all items into container
+    futureItems.forEach(item => {
+      const element = rendererRendering.renderDatedItem(item, state);
+      container.appendChild(element);
+    });
+
+    elements.combined.appendChild(container);
   },
 
   renderDatedItem: (item, state) => {

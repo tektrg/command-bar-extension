@@ -1040,6 +1040,33 @@ img.prd-stv-favicon {
   /* border-left-color: #ff8585; */
 }
 
+/* Future dated items collapsible section */
+.future-dated-items-header {
+  transition: background 0.2s;
+}
+
+.future-dated-items-header:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.future-dated-items-header:active {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Future dated items list container */
+.future-dated-items-list {
+  max-height: 2000px; /* Large enough for many items */
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+  opacity: 1;
+}
+
+.future-dated-items-list.collapsed {
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.3s ease-in, opacity 0.2s ease-in;
+}
+
 /* ===== CALENDAR PICKER STYLES ===== */
 
 .prd-stv-date-modal-content {
