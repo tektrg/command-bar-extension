@@ -64,7 +64,9 @@
     if (!shouldCloseOnOpen) return;
     try {
       window.close();
-    } catch {}
+    } catch (error) {
+      console.warn('Failed to close surface:', error);
+    }
   };
 
   const instance = { config, state, elements };
@@ -124,7 +126,8 @@
         return bookmark;
       }
       return null;
-    } catch {
+    } catch (error) {
+      console.error('Failed to update single bookmark:', error);
       return null;
     }
   }
@@ -137,7 +140,8 @@
         return tab;
       }
       return null;
-    } catch {
+    } catch (error) {
+      console.error('Failed to update single tab:', error);
       return null;
     }
   }
@@ -220,7 +224,10 @@
         await chrome.windows.update(updated.windowId, { focused: true });
       }
       maybeCloseSurface();
-    } catch {}
+    } catch (error) {
+      console.error('Failed to activate tab:', error);
+      window.utils.showToast('Failed to activate tab');
+    }
   }
 
   async function closeTab(tabId) {
@@ -229,7 +236,8 @@
       await removeBookmarkTabRelationship(tabId);
       await chrome.tabs.remove(tabId);
       window.utils.showToast('Tab closed');
-    } catch {
+    } catch (error) {
+      console.error('Failed to close tab:', error);
       window.utils.showToast('Failed to close tab');
     }
   }
@@ -242,14 +250,15 @@
         await chrome.tabs.remove(tabId);
         window.utils.showToast('Tab closed');
       }
-    } catch {
+    } catch (error) {
+      console.error('Failed to close tab from bookmark:', error);
       window.utils.showToast('Failed to close tab');
     }
   }
 
   async function duplicateTab(tab) {
     try {
-      await chrome.tabs.create({ 
+      await chrome.tabs.create({
         url: tab.url,
         windowId: tab.windowId,
         index: tab.index + 1
@@ -257,7 +266,8 @@
       await reloadTabs();
       await window.renderer.render(state, elements);
       window.utils.showToast('Tab duplicated');
-    } catch {
+    } catch (error) {
+      console.error('Failed to duplicate tab:', error);
       window.utils.showToast('Failed to duplicate tab');
     }
   }
@@ -266,7 +276,8 @@
     try {
       await chrome.bookmarks.remove(bookmarkId);
       window.utils.showToast('Bookmark deleted');
-    } catch {
+    } catch (error) {
+      console.error('Failed to delete bookmark:', error);
       window.utils.showToast('Failed to delete bookmark');
     }
   }
@@ -291,7 +302,8 @@
       await reloadBookmarks();
       await window.renderer.render(state, elements);
       window.utils.showToast('Tab saved to folder');
-    } catch {
+    } catch (error) {
+      console.error('Failed to save tab to folder:', error);
       window.utils.showToast('Failed to save tab');
     }
   }
@@ -330,21 +342,23 @@
       // If this is a bookmark that already has an associated tab, switch to that tab
       if (bookmarkId && state.bookmarkTabRelationships[bookmarkId]) {
         const existingTabId = state.bookmarkTabRelationships[bookmarkId];
-        const existingTab = state.tabs.find(tab => tab.id === existingTabId);
-        
-        if (existingTab) {
-          // Switch to the existing tab
-          await activateTab(existingTab);
-          return;
-        } else {
+        try {
+          const existingTab = await chrome.tabs.get(existingTabId);
+          if (existingTab) {
+            // Switch to the existing tab
+            await activateTab(existingTab);
+            return;
+          }
+        } catch {
           // Tab no longer exists, remove the relationship and save to persistent storage
           delete state.bookmarkTabRelationships[bookmarkId];
           await window.storage.saveBookmarkTabLinks(state);
         }
       }
-      
+
       // Check if there's already an open tab with this URL
-      const matchingTab = state.tabs.find(tab => tab.url === url);
+      const allTabs = await chrome.tabs.query({});
+      const matchingTab = allTabs.find(tab => tab.url === url);
       if (matchingTab) {
         // Switch to the existing tab
         await activateTab(matchingTab);
@@ -356,7 +370,7 @@
         }
         return;
       }
-      
+
       let targetTab;
       if (mouseEvent && (mouseEvent.ctrlKey || mouseEvent.metaKey)) {
         // Open in current tab
@@ -370,7 +384,7 @@
         // Create new tab
         targetTab = await chrome.tabs.create({ url });
       }
-      
+
       // Create bookmark-tab relationship if this was opened from a bookmark
       if (bookmarkId && targetTab && targetTab.id) {
         await createBookmarkTabRelationship(bookmarkId, targetTab.id);
@@ -378,7 +392,10 @@
       }
 
       maybeCloseSurface();
-    } catch {}
+    } catch (error) {
+      console.error('Failed to open URL:', error);
+      window.utils.showToast('Failed to open URL');
+    }
   }
 
   // Data loading
@@ -401,22 +418,34 @@
   }
 
   // ----- Keyboard navigation helpers (sidepanel) -----
+  // Cache for linear items to avoid repeated DOM queries
+  let cachedLinearItems = null;
+  let lastCacheTime = 0;
+
   function getLinearItems() {
-    const items = Array.from(elements.combined.querySelectorAll('.prd-stv-cmd-item'));
-    console.log('🔍 getLinearItems: elements.combined =', elements.combined);
-    console.log('🔍 getLinearItems: found .prd-stv-cmd-item elements =', items.length);
-    console.log('🔍 getLinearItems: items =', items.map(el => ({
-      class: el.className,
-      text: el.textContent?.substring(0, 30),
-      id: el.dataset.id
-    })));
-    return items;
+    // Cache results for 50ms to prevent repeated DOM queries during keyboard navigation
+    const now = Date.now();
+    if (cachedLinearItems && (now - lastCacheTime) < 50) {
+      return cachedLinearItems;
+    }
+
+    cachedLinearItems = Array.from(elements.combined.querySelectorAll('.prd-stv-cmd-item'));
+    lastCacheTime = now;
+    return cachedLinearItems;
+  }
+
+  // Clear the cache when needed
+  function clearLinearItemsCache() {
+    cachedLinearItems = null;
+    lastCacheTime = 0;
   }
 
   function clearSelectionHighlight() {
     elements.combined
       .querySelectorAll('.prd-stv-cmd-item.prd-stv-active')
       .forEach(el => el.classList.remove('prd-stv-active'));
+    // Clear the cache since DOM has changed
+    clearLinearItemsCache();
   }
 
   function ensureIndexInRange(index, items) {
@@ -427,34 +456,32 @@
   }
 
   function updateSelection(newIndex) {
-    console.log('🔍 updateSelection called with newIndex:', newIndex);
     const items = getLinearItems();
     newIndex = ensureIndexInRange(newIndex, items);
-    console.log('🔍 updateSelection: final newIndex after bounds check:', newIndex);
     clearSelectionHighlight();
     state.selectedIndex = newIndex;
     if (newIndex >= 0 && items[newIndex]) {
       const el = items[newIndex];
-      console.log('🔍 updateSelection: adding prd-stv-active to element:', el);
       el.classList.add('prd-stv-active');
       el.scrollIntoView({ block: 'nearest' });
     }
+    // Clear the cache since DOM has changed
+    clearLinearItemsCache();
   }
 
   function resetSelection() {
     state.selectedIndex = -1;
     clearSelectionHighlight();
+    // Clear the cache since selection state has changed
+    clearLinearItemsCache();
   }
 
   function handleNavigationKey(e) {
-    console.log('🔍 handleNavigationKey called:', e.key);
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return false;
     const items = getLinearItems();
-    console.log('🔍 getLinearItems returned:', items.length, 'items');
     if (!items.length) return true;
     e.preventDefault();
     const dir = e.key === 'ArrowDown' ? 1 : -1;
-    console.log('🔍 Navigation direction:', dir, 'current selectedIndex:', state.selectedIndex);
     if (state.selectedIndex === -1) {
       updateSelection(e.key === 'ArrowDown' ? 0 : items.length - 1);
     } else {
@@ -488,20 +515,15 @@
   }
 
   function attachKeyboardHandlers() {
-    console.log('🔍 attachKeyboardHandlers: attaching event listeners');
-    console.log('🔍 attachKeyboardHandlers: elements.input =', elements.input);
-    console.log('🔍 attachKeyboardHandlers: elements.combined =', elements.combined);
 
     // Input-focused navigation
     elements.input.addEventListener('keydown', (e) => {
-      console.log('🔍 keydown on input:', e.key);
       if (handleNavigationKey(e)) return;
       if (handleActivationKey(e)) return;
     });
 
     // Allow navigation when focus is within the list
     elements.combined.addEventListener('keydown', (e) => {
-      console.log('🔍 keydown on combined:', e.key);
       if (handleNavigationKey(e)) return;
       if (handleActivationKey(e)) return;
     });
@@ -514,8 +536,6 @@
       const idx = items.indexOf(item);
       if (idx !== -1) updateSelection(idx);
     });
-
-    console.log('🔍 attachKeyboardHandlers: event listeners attached successfully');
   }
 
   function applyBookmarkFilter() {
@@ -533,10 +553,6 @@
   async function reloadTabs() {
     const all = await chrome.tabs.query({});
     const filtered = all.filter(t => t.url && !t.url.startsWith('chrome://'));
-    
-    // Debug: log active tabs
-    const activeTabs = filtered.filter(t => t.active);
-    console.log('Active tabs found:', activeTabs.length, activeTabs.map(t => `${t.title} (${t.id})`));
     
     // Sort tabs by windowId first, then by index to maintain proper order
     filtered.sort((a, b) => {
@@ -596,7 +612,12 @@
   }
 
   const onSearch = window.utils.debounce(async () => {
-    state.query = (elements.input.value || '').trim();
+    const newQuery = (elements.input.value || '').trim();
+
+    // Only update if query actually changed
+    if (newQuery === state.query) return;
+
+    state.query = newQuery;
     applyBookmarkFilter();
     applyTabFilter();
     await window.renderer.render(state, elements);
@@ -692,13 +713,6 @@
     elements.combined = resolveElement(config.listId);
     elements.clearButton = resolveElement('prd-stv-input-clear');
 
-    console.log('🔍 Element resolution results:');
-    console.log('🔍 - elements.input:', elements.input);
-    console.log('🔍 - elements.combined:', elements.combined);
-    console.log('🔍 - elements.clearButton:', elements.clearButton);
-    console.log('🔍 - config.inputId:', config.inputId);
-    console.log('🔍 - config.listId:', config.listId);
-
     if (!elements.input || !elements.combined) {
       console.warn('Command bar bootstrap: missing input or list element', config);
       return;
@@ -755,7 +769,6 @@
     }
 
     // Keyboard navigation bindings
-    console.log('🔍 About to call attachKeyboardHandlers');
     attachKeyboardHandlers();
 
     // Listen for storage changes to sync between windows
@@ -773,7 +786,6 @@
 
         // Handle dated links changes for cross-window sync
         if (changes[window.CONSTANTS.STORAGE_KEYS.DATED_LINKS]) {
-          console.log('[AppBootstrap] Dated links changed, re-rendering');
           await window.renderer.render(state, elements);
         }
       }
@@ -912,26 +924,25 @@
       
       // Listen for tab activation changes - this is the primary event for active tab switching
       chrome.tabs.onActivated.addListener(async (activeInfo) => {
-        console.log('Tab activated:', activeInfo.tabId);
         if (state.dragState.isDragging) return;
-        
+
         // Get the newly activated tab and update it
         try {
           const activeTab = await chrome.tabs.get(activeInfo.tabId);
           if (activeTab) {
             state.itemMaps.tabs.set(activeInfo.tabId, activeTab);
-            
+
             // Update the tab in the appropriate array (active or inactive)
             const activeIndex = state.tabs.findIndex(t => t.id === activeInfo.tabId);
             const inactiveIndex = state.inactiveTabs.findIndex(t => t.id === activeInfo.tabId);
-            
+
             if (activeIndex !== -1) {
               state.tabs[activeIndex] = activeTab;
             }
             if (inactiveIndex !== -1) {
               state.inactiveTabs[inactiveIndex] = activeTab;
             }
-            
+
             // Also need to update the previously active tab to remove its active state
             // Mark all tabs as inactive in our state
             [...state.tabs, ...state.inactiveTabs].forEach(tab => {
@@ -940,12 +951,12 @@
                 state.itemMaps.tabs.set(tab.id, tab);
               }
             });
-            
+
             // Update the filtered tabs if there's a query
             if (state.query) {
               applyTabFilter();
             }
-            
+
             // Force a full re-render to update all tab highlight states
             await window.renderer.render(state, elements);
           }
