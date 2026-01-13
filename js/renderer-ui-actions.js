@@ -89,20 +89,21 @@ const rendererUIActions = {
       return btn;
     };
 
-    if (hasDate) {
-      // Show remove button when date exists
-      return h('div', { class: 'prd-stv-date-icon-row' }, [
-        createIconButton('remove-date', icons.remove, 'Remove date')
-      ]);
-    }
-
-    // Show 4 date option buttons
-    return h('div', { class: 'prd-stv-date-icon-row' }, [
+    const dateOptionsRow = h('div', { class: 'prd-stv-date-icon-row' }, [
       createIconButton('add-date-tomorrow', icons.tomorrow, 'Tomorrow'),
       createIconButton('add-date-next-week', icons.nextWeek, 'Next week'),
       createIconButton('add-date-someday', icons.someday, 'Someday'),
       createIconButton('add-date-custom', icons.custom, 'Custom date')
     ]);
+
+    if (!hasDate) return dateOptionsRow;
+
+    // When a date already exists, keep the same quick options for editing and show remove on a new line.
+    const removeRow = h('div', { class: 'prd-stv-date-icon-row' }, [
+      createIconButton('remove-date', icons.remove, 'Remove date')
+    ]);
+
+    return h('div', { class: 'prd-stv-date-icon-section' }, [dateOptionsRow, removeRow]);
   },
   // Context menu management
   showContextMenu: async (event, bookmark, itemElement) => {

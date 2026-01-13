@@ -566,6 +566,20 @@ img.prd-stv-favicon {
 }
 
 /* Date icon row styling */
+.prd-stv-date-icon-section {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.prd-stv-date-icon-section .prd-stv-date-icon-row {
+  border-bottom: none;
+}
+
+.prd-stv-date-icon-section .prd-stv-date-icon-row + .prd-stv-date-icon-row {
+  border-top: 1px solid #3a3a3a;
+}
+
 .prd-stv-date-icon-row {
   display: flex;
   justify-content: space-around;
