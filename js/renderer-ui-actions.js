@@ -32,6 +32,78 @@ const rendererUIActions = {
       someday: formatDate(someday)
     };
   },
+
+  // Create date icon row for context menus (4 icons: tomorrow, next week, someday, custom)
+  createDateIconRow(hasDate, handleDateAction) {
+    // SVG icons for date options
+    const icons = {
+      // Tomorrow: sun rising icon
+      tomorrow: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2v2M12 18v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M18 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+        <circle cx="12" cy="12" r="4"/>
+      </svg>`,
+      // Next week: calendar with arrow
+      nextWeek: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+        <path d="M12 14l3 3-3 3"/>
+      </svg>`,
+      // Someday: question mark calendar
+      someday: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+        <path d="M12 14c.5-1 1.5-1.5 2-1.5.8 0 1.5.7 1.5 1.5 0 1.5-2 2-2 3"/>
+        <circle cx="12" cy="19" r="0.5" fill="currentColor"/>
+      </svg>`,
+      // Custom: calendar with pencil
+      custom: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+        <path d="M15 14l2 2-4 4h-2v-2l4-4z"/>
+      </svg>`,
+      // Remove: X icon
+      remove: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>`
+    };
+
+    const createIconButton = (action, icon, title) => {
+      const btn = h('button', {
+        class: 'prd-stv-date-icon-btn',
+        'data-action': action,
+        title: title
+      });
+      btn.innerHTML = icon;
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await handleDateAction(action);
+        rendererUIActions.closeContextMenu();
+      });
+      return btn;
+    };
+
+    if (hasDate) {
+      // Show remove button when date exists
+      return h('div', { class: 'prd-stv-date-icon-row' }, [
+        createIconButton('remove-date', icons.remove, 'Remove date')
+      ]);
+    }
+
+    // Show 4 date option buttons
+    return h('div', { class: 'prd-stv-date-icon-row' }, [
+      createIconButton('add-date-tomorrow', icons.tomorrow, 'Tomorrow'),
+      createIconButton('add-date-next-week', icons.nextWeek, 'Next week'),
+      createIconButton('add-date-someday', icons.someday, 'Someday'),
+      createIconButton('add-date-custom', icons.custom, 'Custom date')
+    ]);
+  },
   // Context menu management
   showContextMenu: async (event, bookmark, itemElement) => {
     rendererUIActions.closeContextMenu();
@@ -47,50 +119,6 @@ const rendererUIActions = {
     }
 
     const buttonRect = event.target.getBoundingClientRect();
-
-    // Build date submenu items
-    const dateSubmenuItems = hasDate ? [
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
-        h('span', {}, 'Remove date'))
-    ] : [
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-tomorrow' },
-        h('span', {}, 'Tomorrow')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-next-week' },
-        h('span', {}, 'Next week')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-someday' },
-        h('span', {}, 'Someday')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-custom' },
-        h('span', {}, 'Custom date...'))
-    ];
-
-    const dateActionEl = h('div', {
-      class: 'prd-stv-context-item prd-stv-has-submenu',
-      'data-action': 'date-menu'
-    }, [
-      h('span', { class: 'prd-stv-submenu-arrow' }, '‹'),
-      h('span', {}, hasDate ? 'Change date' : 'Add date')
-    ]);
-
-    const contextMenu = h('div', {
-      class: 'prd-stv-context-menu',
-      style: {
-        position: 'fixed',
-        left: `${buttonRect.left - 120}px`,
-        top: `${buttonRect.bottom + 4}px`,
-        zIndex: '10000'
-      }
-    }, [
-      dateActionEl,
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'rename' },
-        h('span', {}, 'Rename')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'move' },
-        h('span', {}, 'Move to...'))
-    ]);
-
-    document.body.appendChild(contextMenu);
-
-    // Handle submenu
-    let submenu = null;
 
     const handleDateAction = async (action) => {
       const itemData = {
@@ -126,45 +154,31 @@ const rendererUIActions = {
       }
     };
 
-    dateActionEl.addEventListener('mouseenter', () => {
-      if (submenu) submenu.remove();
+    // Create date icon row
+    const dateIconRow = rendererUIActions.createDateIconRow(hasDate, handleDateAction);
 
-      const itemRect = dateActionEl.getBoundingClientRect();
-      submenu = h('div', {
-        class: 'prd-stv-context-menu prd-stv-submenu',
-        style: {
-          position: 'fixed',
-          right: `${window.innerWidth - itemRect.left + 4}px`,
-          top: `${itemRect.top}px`,
-          zIndex: '10001'
-        }
-      }, dateSubmenuItems);
-
-      document.body.appendChild(submenu);
-
-      // Attach click handler immediately after creating submenu
-      submenu.addEventListener('click', async (e) => {
-        const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-        if (action) {
-          await handleDateAction(action);
-          rendererUIActions.closeContextMenu();
-        }
-      });
-    });
-
-    contextMenu.addEventListener('mouseleave', (e) => {
-      if (submenu && !submenu.contains(e.relatedTarget)) {
-        submenu?.remove();
-        submenu = null;
+    const contextMenu = h('div', {
+      class: 'prd-stv-context-menu',
+      style: {
+        position: 'fixed',
+        left: `${buttonRect.left - 120}px`,
+        top: `${buttonRect.bottom + 4}px`,
+        zIndex: '10000'
       }
-    });
+    }, [
+      dateIconRow,
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'rename' },
+        h('span', {}, 'Rename')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'move' },
+        h('span', {}, 'Move to...'))
+    ]);
+
+    document.body.appendChild(contextMenu);
 
     contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
 
-      if (action && action.startsWith('add-date') || action === 'remove-date') {
-        await handleDateAction(action);
-      } else if (action === 'rename') {
+      if (action === 'rename') {
         rendererUIActions.startRename(bookmark, itemElement);
       } else if (action === 'move') {
         rendererUIActions.showMoveDialog(bookmark);
@@ -198,65 +212,6 @@ const rendererUIActions = {
     }
 
     const buttonRect = event.target.getBoundingClientRect();
-
-    // Build date submenu items
-    const dateSubmenuItems = hasDate ? [
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
-        h('span', {}, 'Remove date'))
-    ] : [
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-tomorrow' },
-        h('span', {}, 'Tomorrow')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-next-week' },
-        h('span', {}, 'Next week')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-someday' },
-        h('span', {}, 'Someday')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-custom' },
-        h('span', {}, 'Custom date...'))
-    ];
-
-    const dateActionEl = h('div', {
-      class: 'prd-stv-context-item prd-stv-has-submenu',
-      'data-action': 'date-menu'
-    }, [
-      h('span', { class: 'prd-stv-submenu-arrow' }, '‹'),
-      h('span', {}, hasDate ? 'Change date' : 'Add date')
-    ]);
-
-    const openCount = window.getOpenBookmarkCountInFolder(folder.id, window.state);
-    const closeTabsEl = openCount > 0 ?
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'close-tabs' },
-        h('span', {}, 'Close tabs')) : null;
-
-    const contextMenu = h('div', {
-      class: 'prd-stv-context-menu',
-      style: {
-        position: 'fixed',
-        left: `${buttonRect.left - 120}px`,
-        top: `${buttonRect.bottom + 4}px`,
-        zIndex: '10000'
-      }
-    }, [
-      dateActionEl,
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'save-tab-here' },
-        h('span', {}, 'Save tab here')),
-      closeTabsEl,
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'new-folder' },
-        h('span', {}, 'New folder...')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'rename' },
-        h('span', {}, 'Rename')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'move' },
-        h('span', {}, 'Move to...')),
-      h('div', {
-        class: 'prd-stv-context-item',
-        'data-action': 'delete-folder',
-        style: { color: '#ff6b6b' }
-      }, h('span', {}, 'Delete folder'))
-    ]);
-
-    document.body.appendChild(contextMenu);
-
-    // Handle submenu
-    let submenu = null;
 
     const handleDateAction = async (action) => {
       const itemData = {
@@ -292,45 +247,46 @@ const rendererUIActions = {
       }
     };
 
-    dateActionEl.addEventListener('mouseenter', () => {
-      if (submenu) submenu.remove();
+    // Create date icon row
+    const dateIconRow = rendererUIActions.createDateIconRow(hasDate, handleDateAction);
 
-      const itemRect = dateActionEl.getBoundingClientRect();
-      submenu = h('div', {
-        class: 'prd-stv-context-menu prd-stv-submenu',
-        style: {
-          position: 'fixed',
-          right: `${window.innerWidth - itemRect.left + 4}px`,
-          top: `${itemRect.top}px`,
-          zIndex: '10001'
-        }
-      }, dateSubmenuItems);
+    const openCount = window.getOpenBookmarkCountInFolder(folder.id, window.state);
+    const closeTabsEl = openCount > 0 ?
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'close-tabs' },
+        h('span', {}, 'Close tabs')) : null;
 
-      document.body.appendChild(submenu);
-
-      // Attach click handler immediately after creating submenu
-      submenu.addEventListener('click', async (e) => {
-        const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-        if (action) {
-          await handleDateAction(action);
-          rendererUIActions.closeContextMenu();
-        }
-      });
-    });
-
-    contextMenu.addEventListener('mouseleave', (e) => {
-      if (submenu && !submenu.contains(e.relatedTarget)) {
-        submenu?.remove();
-        submenu = null;
+    const contextMenu = h('div', {
+      class: 'prd-stv-context-menu',
+      style: {
+        position: 'fixed',
+        left: `${buttonRect.left - 120}px`,
+        top: `${buttonRect.bottom + 4}px`,
+        zIndex: '10000'
       }
-    });
+    }, [
+      dateIconRow,
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'save-tab-here' },
+        h('span', {}, 'Save tab here')),
+      closeTabsEl,
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'new-folder' },
+        h('span', {}, 'New folder...')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'rename' },
+        h('span', {}, 'Rename')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'move' },
+        h('span', {}, 'Move to...')),
+      h('div', {
+        class: 'prd-stv-context-item',
+        'data-action': 'delete-folder',
+        style: { color: '#ff6b6b' }
+      }, h('span', {}, 'Delete folder'))
+    ]);
+
+    document.body.appendChild(contextMenu);
 
     contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
 
-      if (action && action.startsWith('add-date') || action === 'remove-date') {
-        await handleDateAction(action);
-      } else if (action === 'save-tab-here') {
+      if (action === 'save-tab-here') {
         window.saveActiveTabToFolder(folder.id);
       } else if (action === 'close-tabs') {
         window.closeTabsInFolder(folder.id);
@@ -377,56 +333,6 @@ const rendererUIActions = {
 
     const buttonRect = event.target.getBoundingClientRect();
 
-    // Build date submenu items
-    const dateSubmenuItems = hasDate ? [
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'remove-date' },
-        h('span', {}, 'Remove date'))
-    ] : [
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-tomorrow' },
-        h('span', {}, 'Tomorrow')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-next-week' },
-        h('span', {}, 'Next week')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-someday' },
-        h('span', {}, 'Someday')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'add-date-custom' },
-        h('span', {}, 'Custom date...'))
-    ];
-
-    const dateActionEl = h('div', {
-      class: 'prd-stv-context-item prd-stv-has-submenu',
-      'data-action': 'date-menu'
-    }, [
-      h('span', { class: 'prd-stv-submenu-arrow' }, '‹'),
-      h('span', {}, hasDate ? 'Change date' : 'Add date')
-    ]);
-
-    const contextMenu = h('div', {
-      class: 'prd-stv-context-menu',
-      style: {
-        position: 'fixed',
-        left: `${buttonRect.left - 120}px`,
-        top: `${buttonRect.bottom + 4}px`,
-        zIndex: '10000'
-      }
-    }, [
-      dateActionEl,
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'rename' },
-        h('span', {}, 'Rename')),
-      h('div', {
-        class: 'prd-stv-context-item',
-        'data-action': isPinned ? 'unpin' : 'pin'
-      }, h('span', {}, isPinned ? 'Unpin Tab' : 'Pin Tab')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'move-to-folder' },
-        h('span', {}, 'Move to...')),
-      h('div', { class: 'prd-stv-context-item', 'data-action': 'duplicate' },
-        h('span', {}, 'Duplicate Tab'))
-    ]);
-
-    document.body.appendChild(contextMenu);
-
-    // Handle submenu
-    let submenu = null;
-
     const handleDateAction = async (action) => {
       const itemData = {
         url: tab.url,
@@ -461,45 +367,37 @@ const rendererUIActions = {
       }
     };
 
-    dateActionEl.addEventListener('mouseenter', () => {
-      if (submenu) submenu.remove();
+    // Create date icon row
+    const dateIconRow = rendererUIActions.createDateIconRow(hasDate, handleDateAction);
 
-      const itemRect = dateActionEl.getBoundingClientRect();
-      submenu = h('div', {
-        class: 'prd-stv-context-menu prd-stv-submenu',
-        style: {
-          position: 'fixed',
-          right: `${window.innerWidth - itemRect.left + 4}px`,
-          top: `${itemRect.top}px`,
-          zIndex: '10001'
-        }
-      }, dateSubmenuItems);
-
-      document.body.appendChild(submenu);
-
-      // Attach click handler immediately after creating submenu
-      submenu.addEventListener('click', async (e) => {
-        const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
-        if (action) {
-          await handleDateAction(action);
-          rendererUIActions.closeContextMenu();
-        }
-      });
-    });
-
-    contextMenu.addEventListener('mouseleave', (e) => {
-      if (submenu && !submenu.contains(e.relatedTarget)) {
-        submenu?.remove();
-        submenu = null;
+    const contextMenu = h('div', {
+      class: 'prd-stv-context-menu',
+      style: {
+        position: 'fixed',
+        left: `${buttonRect.left - 120}px`,
+        top: `${buttonRect.bottom + 4}px`,
+        zIndex: '10000'
       }
-    });
+    }, [
+      dateIconRow,
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'rename' },
+        h('span', {}, 'Rename')),
+      h('div', {
+        class: 'prd-stv-context-item',
+        'data-action': isPinned ? 'unpin' : 'pin'
+      }, h('span', {}, isPinned ? 'Unpin Tab' : 'Pin Tab')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'move-to-folder' },
+        h('span', {}, 'Move to...')),
+      h('div', { class: 'prd-stv-context-item', 'data-action': 'duplicate' },
+        h('span', {}, 'Duplicate Tab'))
+    ]);
+
+    document.body.appendChild(contextMenu);
 
     contextMenu.addEventListener('click', async (e) => {
       const action = e.target.closest('.prd-stv-context-item')?.dataset.action;
 
-      if (action && action.startsWith('add-date') || action === 'remove-date') {
-        await handleDateAction(action);
-      } else if (action === 'rename') {
+      if (action === 'rename') {
         rendererUIActions.startTabRename(tab, itemElement);
       } else if (action === 'pin') {
         try {

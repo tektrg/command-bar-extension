@@ -565,6 +565,59 @@ img.prd-stv-favicon {
   }
 }
 
+/* Date icon row styling */
+.prd-stv-date-icon-row {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.prd-stv-date-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #9b9b9b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.prd-stv-date-icon-btn:hover {
+  background: #3a3a3a;
+  color: #b9a079;
+}
+
+.prd-stv-date-icon-btn:active {
+  transform: scale(0.95);
+}
+
+.prd-stv-date-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Single remove button centered */
+.prd-stv-date-icon-row:has(.prd-stv-date-icon-btn:only-child) {
+  justify-content: center;
+}
+
+.prd-stv-date-icon-row .prd-stv-date-icon-btn:only-child {
+  color: #ff6b6b;
+}
+
+.prd-stv-date-icon-row .prd-stv-date-icon-btn:only-child:hover {
+  background: rgba(255, 107, 107, 0.15);
+  color: #ff6b6b;
+}
+
 /* Folder item selection styling */
 .prd-stv-folder-item:hover {
   background: #353535;
